@@ -45,7 +45,7 @@ func main() {
 	}
 
 	handler := handlers.New(db, storageClient, cfg)
-	
+
 	srv := server.New(cfg.Port, handler.Routes())
 
 	go func() {
