@@ -25,7 +25,7 @@ func TestNewConnection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, err := NewConnection(tt.dbURL)
-			
+
 			if tt.wantError {
 				if err == nil {
 					t.Errorf("NewConnection() expected error, got nil")
