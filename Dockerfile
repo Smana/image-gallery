@@ -1,5 +1,5 @@
 # Start from the official Golang image
-FROM golang:1.22 as builder
+FROM golang:1.25 as builder
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -14,18 +14,26 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build -o main ./cmd/helloworld
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
 
 # Start a new stage from scratch
 FROM cgr.dev/chainguard/wolfi-base
 
 WORKDIR /app
 
-# Install Postgres client
-RUN apk --no-cache add postgresql-client
+# Install required packages
+RUN apk --no-cache add ca-certificates curl
 
 # Copy the Pre-built binary file from the previous stage
 COPY --from=builder /app/main /app/
+COPY --from=builder /app/web /app/web
+
+# Create non-root user
+RUN addgroup -g 1001 appgroup && \
+    adduser -D -u 1001 -G appgroup appuser && \
+    chown -R appuser:appgroup /app
+
+USER appuser
 
 # Expose port 8080 to the outside world
 EXPOSE 8080
