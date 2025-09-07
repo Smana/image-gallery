@@ -1,0 +1,80 @@
+# Claude Code configuration for Go projects
+version: 1
+
+# Project information
+project:
+  name: "Image Gallery"
+  description: "A modern Go web application for managing and displaying images with HTMX frontend"
+  language: "go"
+  framework: "chi"
+
+# Build and run commands
+commands:
+  build: "make build"
+  test: "make test"
+  lint: "make lint && make vet"
+  format: "make fmt"
+  dev: "make dev"
+  start: "make run"
+
+# Go-specific settings
+go:
+  version: "1.25"
+  module: "image-gallery"
+  
+# Testing configuration
+test:
+  command: "go test -v ./..."
+  coverage: "go test -race -coverprofile=coverage.out ./..."
+  
+# Development tools
+tools:
+  linter: "golangci-lint"
+  formatter: "gofmt"
+  hot_reload: "air"
+
+# Directories to watch/ignore
+watch:
+  include:
+    - "**/*.go"
+    - "**/*.html"
+    - "**/*.yaml"
+    - "**/*.yml"
+  exclude:
+    - "tmp/**"
+    - "bin/**"
+    - "vendor/**"
+    - "**/*_test.go" # during development
+
+# Environment setup
+env:
+  development:
+    - ".env.example"
+  docker:
+    - "docker-compose.yaml"
+    
+# Documentation
+docs:
+  readme: "README.md"
+  api_docs: "api/"
+  
+# Dependencies
+dependencies:
+  main:
+    - "github.com/go-chi/chi/v5" # HTTP router
+    - "github.com/lib/pq" # PostgreSQL driver
+    - "github.com/minio/minio-go/v7" # MinIO/S3 client
+    - "github.com/joho/godotenv" # Environment variables
+  dev:
+    - "github.com/air-verse/air" # Hot reload
+    - "github.com/golangci/golangci-lint" # Linting
+
+# Architecture notes
+architecture:
+  pattern: "Domain-driven design with clean architecture"
+  layers:
+    - "cmd/ - Application entry points"
+    - "internal/ - Private application code"
+    - "pkg/ - Public packages (reusable)"
+    - "api/ - API definitions"
+    - "web/ - Web assets"

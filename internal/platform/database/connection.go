@@ -1,4 +1,4 @@
-package server
+package database
 
 import (
 	"database/sql"
@@ -6,7 +6,11 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func NewDB(dbURL string) (*sql.DB, error) {
+func NewConnection(dbURL string) (*sql.DB, error) {
+	if dbURL == "" {
+		return nil, ErrMissingDatabaseURL
+	}
+
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		return nil, err
