@@ -5,23 +5,47 @@ import (
 	"net/http"
 
 	"image-gallery/internal/config"
+	"image-gallery/internal/domain/image"
 	"image-gallery/internal/platform/storage"
+	"image-gallery/internal/services"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
 type Handler struct {
+	// Legacy fields for backward compatibility
 	db      *sql.DB
 	storage *storage.MinIOClient
 	config  *config.Config
+	
+	// New service-based dependencies
+	container    *services.Container
+	imageService image.ImageService
+	tagService   image.TagService
 }
 
+// New creates a handler with legacy dependencies (for backward compatibility)
 func New(db *sql.DB, storage *storage.MinIOClient, config *config.Config) *Handler {
 	return &Handler{
 		db:      db,
 		storage: storage,
 		config:  config,
+	}
+}
+
+// NewWithContainer creates a handler with the dependency injection container
+func NewWithContainer(container *services.Container) *Handler {
+	return &Handler{
+		// Legacy fields for backward compatibility
+		db:      container.DB(),
+		storage: container.StorageClient(),
+		config:  container.Config(),
+		
+		// New service-based dependencies
+		container:    container,
+		imageService: container.ImageService(),
+		tagService:   container.TagService(),
 	}
 }
 
