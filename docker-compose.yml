@@ -39,6 +39,35 @@ services:
       timeout: 20s
       retries: 3
 
+  # Image Gallery Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: image-gallery-app
+    environment:
+      - GO_ENV=development
+      - PORT=8080
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgres://testuser:testpass@postgres:5432/image_gallery_test?sslmode=disable
+      - STORAGE_ENDPOINT=minio:9000
+      - STORAGE_ACCESS_KEY=minioadmin
+      - STORAGE_SECRET_KEY=minioadmin
+      - STORAGE_BUCKET=images
+      - STORAGE_USE_SSL=false
+      - STORAGE_REGION=us-east-1
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    working_dir: /app
+    restart: unless-stopped
+
   # Optional: Redis for caching (future enhancement)
   redis:
     image: redis:7-alpine

@@ -200,14 +200,20 @@ make docker-build
 ### Development with Docker
 
 ```bash
-# Full development environment
-docker-compose up
+# Full development environment (all services including app)
+docker-compose up --build
 
-# Just the application dependencies
+# Just the infrastructure dependencies (for local Go development)
 docker-compose up postgres minio redis
+
+# Run only the app service (assumes infrastructure is running)
+docker-compose up app
 
 # View logs
 docker-compose logs -f app
+
+# Follow logs for specific services
+docker-compose logs -f postgres minio
 ```
 
 ## 🔧 Available Make Commands

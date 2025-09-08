@@ -1,44 +1,57 @@
-# Start from the official Golang image
-FROM golang:1.25 as builder
+# Multi-stage build for optimized production image
+FROM golang:1.25-alpine as builder
+
+# Install git for go mod download
+RUN apk add --no-cache git ca-certificates
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
 
-# Copy go mod and sum files
+# Copy go mod and sum files first for better caching
 COPY go.mod go.sum ./
 
-# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
+# Download dependencies (cached if go.mod/go.sum unchanged)
 RUN go mod download
 
-# Copy the source from the current directory to the Working Directory inside the container
+# Copy the source code
 COPY . .
 
-# Build the Go app
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
+# Build the Go app with optimizations
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s" \
+    -a -installsuffix cgo \
+    -o server ./cmd/server
 
 # Start a new stage from scratch
-FROM cgr.dev/chainguard/wolfi-base
+FROM alpine:3.19
+
+# Install ca-certificates for HTTPS requests and timezone data
+RUN apk --no-cache add ca-certificates tzdata curl
 
 WORKDIR /app
 
-# Install required packages
-RUN apk --no-cache add ca-certificates curl
+# Create non-root user first
+RUN addgroup -g 1001 appgroup && \
+    adduser -D -u 1001 -G appgroup appuser
 
-# Copy the Pre-built binary file from the previous stage
-COPY --from=builder /app/main /app/
+# Copy the binary from the builder stage
+COPY --from=builder /app/server /app/
 COPY --from=builder /app/web /app/web
 
-# Create non-root user
-RUN addgroup -g 1001 appgroup && \
-    adduser -D -u 1001 -G appgroup appuser && \
-    chown -R appuser:appgroup /app
+# Change ownership to non-root user
+RUN chown -R appuser:appgroup /app
 
+# Switch to non-root user
 USER appuser
 
-# Expose port 8080 to the outside world
+# Expose port 8080
 EXPOSE 8080
 
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
 # Command to run the executable
-CMD ["/app/main"]
+CMD ["/app/server"]
 
 
