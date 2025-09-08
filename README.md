@@ -50,7 +50,7 @@ A comprehensive image gallery application built with Go 1.25, following Test-Dri
 
 ```bash
 git clone <repository-url>
-cd golang-helloworld
+cd image-gallery
 ```
 
 ### 2. Start Development Environment

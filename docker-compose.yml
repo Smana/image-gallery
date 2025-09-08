@@ -1,5 +1,8 @@
 version: '3.8'
 
+# Project name for docker-compose
+name: image-gallery
+
 services:
   postgres:
     image: postgres:15-alpine
