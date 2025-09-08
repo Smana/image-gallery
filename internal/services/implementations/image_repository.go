@@ -5,17 +5,18 @@ import (
 	"database/sql"
 
 	"image-gallery/internal/domain/image"
+	"image-gallery/internal/platform/database"
 )
 
-// ImageRepositoryImpl implements the image.Repository interface
+// ImageRepositoryImpl implements the image.Repository interface using the existing database repository
 type ImageRepositoryImpl struct {
-	db *sql.DB
+	repo database.ImageRepository
 }
 
 // NewImageRepository creates a new image repository implementation
 func NewImageRepository(db *sql.DB) image.Repository {
 	return &ImageRepositoryImpl{
-		db: db,
+		repo: database.NewImageRepository(db),
 	}
 }
 
