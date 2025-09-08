@@ -1,6 +1,8 @@
 # Go build artifacts
 /bin/
 /tmp/
+server
+image-gallery
 *.exe
 *.exe~
 *.dll
