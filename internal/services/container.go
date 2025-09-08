@@ -6,6 +6,7 @@ import (
 
 	"image-gallery/internal/config"
 	"image-gallery/internal/domain/image"
+	"image-gallery/internal/platform/database"
 	"image-gallery/internal/platform/storage"
 	"image-gallery/internal/services/implementations"
 )
@@ -73,8 +74,11 @@ func NewContainerForTest(testCfg *TestConfig, db *sql.DB, storageClient *storage
 
 // initializeServices initializes all services in the correct dependency order
 func (c *Container) initializeServices() error {
-	// Initialize repositories first
-	c.imageRepository = implementations.NewImageRepository(c.db)
+	// Initialize database repositories first
+	dbImageRepo := database.NewImageRepository(c.db)
+	
+	// Initialize domain repository adapters
+	c.imageRepository = implementations.NewImageRepositoryAdapter(dbImageRepo)
 	c.tagRepository = implementations.NewTagRepository(c.db)
 	
 	// Initialize infrastructure services
