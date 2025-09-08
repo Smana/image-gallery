@@ -10,6 +10,11 @@ import (
 	"image-gallery/internal/services/implementations"
 )
 
+// TestConfig provides test-specific configuration for integration testing
+type TestConfig struct {
+	DatabaseURL string
+}
+
 // Container holds all the application dependencies
 type Container struct {
 	config *config.Config
@@ -50,6 +55,20 @@ func NewContainer(cfg *config.Config, db *sql.DB, storageClient *storage.MinIOCl
 	}
 	
 	return container, nil
+}
+
+// NewContainerForTest creates a new dependency injection container for testing
+func NewContainerForTest(testCfg *TestConfig, db *sql.DB, storageClient *storage.MinIOClient) (*Container, error) {
+	// Create a minimal config for testing
+	cfg := &config.Config{
+		Environment: "test",
+		DatabaseURL: testCfg.DatabaseURL,
+		Storage: config.StorageConfig{
+			BucketName: "test-images",
+		},
+	}
+	
+	return NewContainer(cfg, db, storageClient)
 }
 
 // initializeServices initializes all services in the correct dependency order
