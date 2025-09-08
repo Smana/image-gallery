@@ -55,6 +55,8 @@ func (h *Handler) Routes() http.Handler {
 	return r
 }
 
+// Web handlers for HTML responses
+
 func (h *Handler) indexHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/gallery", http.StatusFound)
 }
@@ -86,3 +88,4 @@ func (h *Handler) galleryHandler(w http.ResponseWriter, r *http.Request) {
 </html>
 	`))
 }
+
