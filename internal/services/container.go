@@ -82,7 +82,13 @@ func (c *Container) initializeServices() error {
 	c.tagRepository = implementations.NewTagRepository(c.db)
 	
 	// Initialize infrastructure services
-	c.storageService = implementations.NewStorageService(c.storageClient)
+	// Try to create full storage service, fallback to MinIOClient wrapper
+	storageConfig := &c.config.Storage
+	if fullStorageService, err := storage.NewService(storageConfig); err == nil {
+		c.storageService = implementations.NewStorageServiceWithService(fullStorageService)
+	} else {
+		c.storageService = implementations.NewStorageService(c.storageClient)
+	}
 	c.imageProcessor = implementations.NewImageProcessor()
 	c.validationService = implementations.NewValidationService()
 	
