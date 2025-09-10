@@ -14,6 +14,7 @@ import (
 	"image-gallery/internal/platform/database"
 	"image-gallery/internal/platform/server"
 	"image-gallery/internal/platform/storage"
+	"image-gallery/internal/services"
 	"image-gallery/internal/web/handlers"
 
 	"github.com/joho/godotenv"
@@ -44,7 +45,14 @@ func main() {
 		log.Fatalf("Failed to connect to storage: %v", err)
 	}
 
-	handler := handlers.New(db, storageClient, cfg)
+	// Initialize dependency injection container
+	container, err := services.NewContainer(cfg, db, storageClient)
+	if err != nil {
+		log.Fatalf("Failed to initialize services container: %v", err)
+	}
+	defer container.Close()
+
+	handler := handlers.NewWithContainer(container)
 
 	srv := server.New(cfg.Port, handler.Routes())
 
