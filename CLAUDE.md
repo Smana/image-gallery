@@ -64,7 +64,7 @@ This is a clean architecture Go application with strict separation of concerns:
 ### Development Environment
 - PostgreSQL runs on port 5432 (user: testuser, password: testpass, db: image_gallery_test)
 - MinIO runs on port 9000 (console on 9001, credentials: minioadmin/minioadmin)
-- Redis runs on port 6379 (optional, for future caching)
+- Valkey runs on port 6379 (caching layer, can be disabled)
 - Application runs on port 8080
 
 ### Storage Configuration
@@ -95,6 +95,25 @@ STORAGE_USE_SSL=true
 ```
 When credentials are empty, the application uses AWS credentials chain (Pod Identity, IAM roles, credentials file, environment variables).
 
+### Caching Configuration
+Valkey caching is enabled by default but can be disabled:
+
+#### Valkey Enabled (Default)
+```bash
+CACHE_ENABLED=true
+CACHE_ADDRESS=localhost:6379
+CACHE_PASSWORD=
+CACHE_DATABASE=0
+CACHE_DEFAULT_TTL=1h
+```
+
+#### Valkey Disabled
+```bash
+CACHE_ENABLED=false
+```
+
+The application gracefully degrades when Valkey is unavailable - caching errors don't break functionality.
+
 ### API Endpoints
 - `GET /api/images` - List images with pagination
 - `POST /api/images` - Upload new image
@@ -105,12 +124,15 @@ When credentials are empty, the application uses AWS credentials chain (Pod Iden
 
 ### Testing Strategy
 - **Unit Tests**: Fast, isolated tests alongside implementation files
-- **Integration Tests**: Real database/storage using testcontainers in `internal/services/integrationtests/`
-- **Test Utilities**: Shared test infrastructure in `internal/testutils/`
+- **Integration Tests**: Real database/storage/Valkey using testcontainers in `internal/services/integrationtests/`
+- **Test Utilities**: Shared test infrastructure in `internal/testutils/` with PostgreSQL, MinIO, and Valkey containers
+- **Cache Tests**: Valkey cache tests skip gracefully if Valkey unavailable during development
 
 ### Important Notes
 - Always run infrastructure services before running the application locally
-- Integration tests require Docker to be running
-- The application follows strict TDD methodology
+- For full functionality, start all services: `docker-compose up -d` (PostgreSQL, MinIO, Valkey)
+- For local development without Valkey: Set `CACHE_ENABLED=false` or start only: `docker-compose up -d postgres minio`
+- Integration tests require Docker to be running and will start containers automatically
+- The application follows strict TDD methodology with comprehensive test coverage
 - All new code requires corresponding tests
 - Use the dependency injection container for service resolution

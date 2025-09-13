@@ -79,6 +79,7 @@ var (
 	ErrImageNotFound       = errors.New("image not found")
 	ErrTagNotFound         = errors.New("tag not found")
 	ErrDuplicateTag        = errors.New("duplicate tag")
+	ErrCacheUnavailable    = errors.New("cache service unavailable")
 )
 
 // Constants for validation

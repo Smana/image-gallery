@@ -59,6 +59,11 @@ services:
       - STORAGE_BUCKET=images
       - STORAGE_USE_SSL=false
       - STORAGE_REGION=us-east-1
+      - CACHE_ENABLED=true
+      - CACHE_ADDRESS=valkey:6379
+      - CACHE_PASSWORD=
+      - CACHE_DATABASE=0
+      - CACHE_DEFAULT_TTL=1h
     ports:
       - "8080:8080"
     depends_on:
@@ -66,19 +71,21 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      valkey:
+        condition: service_healthy
     restart: unless-stopped
 
-  # Optional: Redis for caching (future enhancement)
-  redis:
-    image: redis:7-alpine
-    container_name: image-gallery-redis
+  # Valkey for caching
+  valkey:
+    image: valkey/valkey:7-alpine
+    container_name: image-gallery-valkey
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
+      - valkey_data:/data
+    command: valkey-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -86,4 +93,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
-  redis_data:
+  valkey_data:

@@ -16,6 +16,7 @@ type Config struct {
 	Host        string
 	DatabaseURL string
 	Storage     StorageConfig
+	Cache       CacheConfig
 	Logging     *LoggingConfig
 	Server      *ServerConfig
 }
@@ -30,6 +31,27 @@ type StorageConfig struct {
 	Region          string
 	MaxUploadSize   int64
 	AllowedTypes    []string
+}
+
+// CacheConfig holds Redis cache configuration
+type CacheConfig struct {
+	Enabled         bool
+	Address         string
+	Password        string
+	Database        int
+	MaxRetries      int
+	MinRetryBackoff time.Duration
+	MaxRetryBackoff time.Duration
+	DialTimeout     time.Duration
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	PoolSize        int
+	MinIdleConns    int
+	MaxIdleConns    int
+	MaxConnAge      time.Duration
+	PoolTimeout     time.Duration
+	IdleTimeout     time.Duration
+	DefaultTTL      time.Duration
 }
 
 // LoggingConfig holds logging configuration
@@ -56,6 +78,24 @@ func Load() (*Config, error) {
 	writeTimeout, _ := time.ParseDuration(getEnv("WRITE_TIMEOUT", "10s"))
 	idleTimeout, _ := time.ParseDuration(getEnv("SERVER_TIMEOUT", "30s"))
 
+	// Cache configuration
+	cacheEnabled, _ := strconv.ParseBool(getEnv("CACHE_ENABLED", "true"))
+	cacheDB, _ := strconv.Atoi(getEnv("CACHE_DATABASE", "0"))
+	cacheMaxRetries, _ := strconv.Atoi(getEnv("CACHE_MAX_RETRIES", "3"))
+	cachePoolSize, _ := strconv.Atoi(getEnv("CACHE_POOL_SIZE", "10"))
+	cacheMinIdleConns, _ := strconv.Atoi(getEnv("CACHE_MIN_IDLE_CONNS", "5"))
+	cacheMaxIdleConns, _ := strconv.Atoi(getEnv("CACHE_MAX_IDLE_CONNS", "10"))
+
+	cacheMinRetryBackoff, _ := time.ParseDuration(getEnv("CACHE_MIN_RETRY_BACKOFF", "8ms"))
+	cacheMaxRetryBackoff, _ := time.ParseDuration(getEnv("CACHE_MAX_RETRY_BACKOFF", "512ms"))
+	cacheDialTimeout, _ := time.ParseDuration(getEnv("CACHE_DIAL_TIMEOUT", "5s"))
+	cacheReadTimeout, _ := time.ParseDuration(getEnv("CACHE_READ_TIMEOUT", "3s"))
+	cacheWriteTimeout, _ := time.ParseDuration(getEnv("CACHE_WRITE_TIMEOUT", "3s"))
+	cacheMaxConnAge, _ := time.ParseDuration(getEnv("CACHE_MAX_CONN_AGE", "30m"))
+	cachePoolTimeout, _ := time.ParseDuration(getEnv("CACHE_POOL_TIMEOUT", "4s"))
+	cacheIdleTimeout, _ := time.ParseDuration(getEnv("CACHE_IDLE_TIMEOUT", "5m"))
+	cacheDefaultTTL, _ := time.ParseDuration(getEnv("CACHE_DEFAULT_TTL", "1h"))
+
 	config := &Config{
 		Environment: getEnv("GO_ENV", "development"),
 		Port:        getEnv("PORT", "8080"),
@@ -70,6 +110,25 @@ func Load() (*Config, error) {
 			Region:          getEnv("STORAGE_REGION", "us-east-1"),
 			MaxUploadSize:   maxUploadSize,
 			AllowedTypes:    allowedTypes,
+		},
+		Cache: CacheConfig{
+			Enabled:         cacheEnabled,
+			Address:         getEnv("CACHE_ADDRESS", "localhost:6379"),
+			Password:        getEnv("CACHE_PASSWORD", ""),
+			Database:        cacheDB,
+			MaxRetries:      cacheMaxRetries,
+			MinRetryBackoff: cacheMinRetryBackoff,
+			MaxRetryBackoff: cacheMaxRetryBackoff,
+			DialTimeout:     cacheDialTimeout,
+			ReadTimeout:     cacheReadTimeout,
+			WriteTimeout:    cacheWriteTimeout,
+			PoolSize:        cachePoolSize,
+			MinIdleConns:    cacheMinIdleConns,
+			MaxIdleConns:    cacheMaxIdleConns,
+			MaxConnAge:      cacheMaxConnAge,
+			PoolTimeout:     cachePoolTimeout,
+			IdleTimeout:     cacheIdleTimeout,
+			DefaultTTL:      cacheDefaultTTL,
 		},
 		Logging: &LoggingConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),
