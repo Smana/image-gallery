@@ -75,23 +75,23 @@ jobs:
         with:
           version: "latest"
           module: "github.com/sagikazarmark/daggerverse/go@v0.9.0"
-          call: |
-            with-platform linux/amd64,linux/arm64 \
-            with-cgo-disabled \
-            build \
-            --src=. \
-            --version=${{ env.GO_VERSION }} \
-            --package=./cmd/server \
-            --ldflags="-w -s" \
-            container \
-            --base-image=gcr.io/distroless/static-debian12:nonroot \
-            --binary-name=server \
-            with-label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
-            with-label org.opencontainers.image.revision=${{ github.sha }} \
-            with-label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-            with-label org.opencontainers.image.title=image-gallery \
-            with-label org.opencontainers.image.description="Modern Go image gallery application" \
-            with-exposed-port 8080 \
+          call: >-
+            with-platform linux/amd64,linux/arm64
+            with-cgo-disabled
+            build
+            --src=.
+            --version=${{ env.GO_VERSION }}
+            --package=./cmd/server
+            --ldflags="-w -s"
+            container
+            --base-image=gcr.io/distroless/static-debian12:nonroot
+            --binary-name=server
+            with-label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            with-label org.opencontainers.image.revision=${{ github.sha }}
+            with-label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            with-label org.opencontainers.image.title=image-gallery
+            with-label org.opencontainers.image.description="Modern Go image gallery application"
+            with-exposed-port 8080
             publish --address=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Tag as latest
@@ -100,23 +100,23 @@ jobs:
         with:
           version: "latest"
           module: "github.com/sagikazarmark/daggerverse/go@v0.9.0"
-          call: |
-            with-platform linux/amd64,linux/arm64 \
-            with-cgo-disabled \
-            build \
-            --src=. \
-            --version=${{ env.GO_VERSION }} \
-            --package=./cmd/server \
-            --ldflags="-w -s" \
-            container \
-            --base-image=gcr.io/distroless/static-debian12:nonroot \
-            --binary-name=server \
-            with-label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
-            with-label org.opencontainers.image.revision=${{ github.sha }} \
-            with-label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-            with-label org.opencontainers.image.title=image-gallery \
-            with-label org.opencontainers.image.description="Modern Go image gallery application" \
-            with-exposed-port 8080 \
+          call: >-
+            with-platform linux/amd64,linux/arm64
+            with-cgo-disabled
+            build
+            --src=.
+            --version=${{ env.GO_VERSION }}
+            --package=./cmd/server
+            --ldflags="-w -s"
+            container
+            --base-image=gcr.io/distroless/static-debian12:nonroot
+            --binary-name=server
+            with-label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            with-label org.opencontainers.image.revision=${{ github.sha }}
+            with-label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            with-label org.opencontainers.image.title=image-gallery
+            with-label org.opencontainers.image.description="Modern Go image gallery application"
+            with-exposed-port 8080
             publish --address=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
       - name: Generate SBOM
