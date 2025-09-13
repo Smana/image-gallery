@@ -21,10 +21,17 @@ jobs:
     outputs:
       proceed: ${{ steps.check.outputs.proceed }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Check if we should proceed
         id: check
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          # Check if this is a release commit (skip if release-please is handling it)
+          if git log -1 --pretty=format:"%s" | grep -E "^(chore|release).*release"; then
+            echo "Release commit detected - skipping to avoid duplicate images"
+            echo "proceed=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
             echo "Direct push to main - proceeding"
             echo "proceed=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
