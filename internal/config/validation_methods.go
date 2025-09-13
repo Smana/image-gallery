@@ -216,20 +216,22 @@ func (c *Config) validateStorage() ValidationErrors {
 	}
 
 	// Validate access credentials for production environments
+	// Allow empty credentials for EKS Pod Identity / IAM roles
 	if c.Environment == "production" {
-		if c.Storage.AccessKeyID == "" || c.Storage.AccessKeyID == "minioadmin" {
+		// Only warn about minioadmin credentials, allow empty for IAM roles
+		if c.Storage.AccessKeyID == "minioadmin" {
 			errors = append(errors, ValidationError{
 				Field:   "storage.access_key_id",
 				Value:   c.Storage.AccessKeyID,
-				Message: "storage access key ID must be set for production environment",
+				Message: "minioadmin credentials should not be used in production (use IAM roles or proper AWS credentials)",
 			})
 		}
 
-		if c.Storage.SecretAccessKey == "" || c.Storage.SecretAccessKey == "minioadmin" {
+		if c.Storage.SecretAccessKey == "minioadmin" {
 			errors = append(errors, ValidationError{
 				Field:   "storage.secret_access_key",
 				Value:   "[REDACTED]",
-				Message: "storage secret access key must be set for production environment",
+				Message: "minioadmin credentials should not be used in production (use IAM roles or proper AWS credentials)",
 			})
 		}
 	}
