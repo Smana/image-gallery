@@ -91,15 +91,15 @@ jobs:
         with:
           version: "latest"
           module: "github.com/sagikazarmark/daggerverse/go@v0.9.0"
-          call: |
-            with-platform ${{ matrix.platform }} \
-            with-cgo-disabled \
-            build \
-            --src=. \
-            --version=${{ env.GO_VERSION }} \
-            --package=./cmd/server \
-            --ldflags="-w -s" \
-            --output=${{ steps.platform.outputs.binary_name }} \
+          call: >-
+            with-platform ${{ matrix.platform }}
+            with-cgo-disabled
+            build
+            --src=.
+            --version=${{ env.GO_VERSION }}
+            --package=./cmd/server
+            --ldflags="-w -s"
+            --output=${{ steps.platform.outputs.binary_name }}
             export --path=./bin/
 
       - name: Upload build artifacts
@@ -167,19 +167,19 @@ jobs:
         with:
           version: "latest"
           module: "github.com/sagikazarmark/daggerverse/go@v0.9.0"
-          call: |
-            with-env-variable DATABASE_URL "postgres://testuser:testpass@localhost:5432/image_gallery_test?sslmode=disable" \
-            with-env-variable STORAGE_ENDPOINT "localhost:9000" \
-            with-env-variable STORAGE_ACCESS_KEY "minioadmin" \
-            with-env-variable STORAGE_SECRET_KEY "minioadmin" \
-            with-env-variable STORAGE_BUCKET "images" \
-            with-env-variable STORAGE_USE_SSL "false" \
-            with-env-variable STORAGE_REGION "us-east-1" \
-            with-env-variable CACHE_ENABLED "true" \
-            with-env-variable CACHE_ADDRESS "localhost:6379" \
-            with-env-variable CACHE_PASSWORD "" \
-            with-env-variable CACHE_DATABASE "0" \
-            with-env-variable CACHE_DEFAULT_TTL "1h" \
+          call: >-
+            with-env-variable DATABASE_URL "postgres://testuser:testpass@localhost:5432/image_gallery_test?sslmode=disable"
+            with-env-variable STORAGE_ENDPOINT "localhost:9000"
+            with-env-variable STORAGE_ACCESS_KEY "minioadmin"
+            with-env-variable STORAGE_SECRET_KEY "minioadmin"
+            with-env-variable STORAGE_BUCKET "images"
+            with-env-variable STORAGE_USE_SSL "false"
+            with-env-variable STORAGE_REGION "us-east-1"
+            with-env-variable CACHE_ENABLED "true"
+            with-env-variable CACHE_ADDRESS "localhost:6379"
+            with-env-variable CACHE_PASSWORD ""
+            with-env-variable CACHE_DATABASE "0"
+            with-env-variable CACHE_DEFAULT_TTL "1h"
             exec --src=. --version=${{ env.GO_VERSION }} --args=go,test,./internal/services/integrationtests/...,--v
 
   # Status check for required validation
