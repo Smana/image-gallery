@@ -55,7 +55,7 @@ This is a clean architecture Go application with strict separation of concerns:
 - **Test-Driven Development**: Comprehensive unit and integration tests
 
 ### Technology Stack
-- **Runtime**: Go 1.24
+- **Runtime**: Go 1.25
 - **Database**: PostgreSQL 15 with Atlas schema management
 - **Storage**: MinIO S3-compatible object storage
 - **Testing**: Testcontainers for isolated integration tests
@@ -136,3 +136,4 @@ The application gracefully degrades when Valkey is unavailable - caching errors 
 - The application follows strict TDD methodology with comprehensive test coverage
 - All new code requires corresponding tests
 - Use the dependency injection container for service resolution
+- Use Dagger for all CI steps when possible

@@ -11,6 +11,7 @@ A comprehensive image gallery application built with Go 1.25, following Test-Dri
 - **Object Storage**: MinIO S3-compatible storage for images
 - **Valkey Caching**: Performance optimization with Valkey caching layer
 - **Testcontainers**: Docker-based integration testing
+- **Dagger CI/CD**: Containerized CI/CD pipeline using Daggerverse modules
 - **Modern Tooling**: Latest Go dependencies and development tools
 
 ## 🏗️ Project Structure
@@ -348,13 +349,51 @@ The application exposes RESTful APIs for image management:
 
 For detailed API documentation, start the server and visit `/docs` (when implemented).
 
+## 🚀 CI/CD Pipeline
+
+This project uses **Dagger** for containerized CI/CD pipelines with existing Daggerverse modules:
+
+### Local Development with Dagger
+```bash
+# Install Dagger and other tools
+make install-tools
+
+# Run complete CI pipeline locally
+make dagger-ci
+
+# Individual steps
+make dagger-lint          # Lint code
+make dagger-test          # Run tests
+make dagger-vulncheck     # Security scan
+make dagger-trivy-fs      # Filesystem security scan
+make dagger-build         # Build binary
+```
+
+### GitHub Actions
+The CI/CD pipeline uses **two workflows** for optimal performance:
+
+**CI Validation** (runs on all branches):
+- ✅ Lints code with golangci-lint
+- ✅ Runs unit and integration tests
+- ✅ Performs security scanning with govulncheck
+- ✅ Scans filesystem with Trivy for vulnerabilities
+- ✅ Builds multi-platform binaries for testing
+
+**Build & Push** (runs on main branch):
+- ✅ Creates and pushes multi-arch Docker images
+- ✅ Scans container images with Trivy for vulnerabilities
+- ✅ Uploads security reports to GitHub Security tab
+- ✅ Generates release artifacts and documentation
+
+See [docs/DAGGER_CI.md](docs/DAGGER_CI.md) for detailed documentation.
+
 ## 🎯 Next Steps
 
 - [ ] Implement HTMX-powered web interface
 - [ ] Add comprehensive API documentation  
-- [ ] Set up CI/CD pipeline with GitHub Actions
+- [x] Set up CI/CD pipeline with Dagger
 - [ ] Add metrics and monitoring
-- [ ] Implement caching layer
+- [x] Implement caching layer
 - [ ] Add search functionality
 
 ## 📄 License
