@@ -11,9 +11,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/minio"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	redisModule "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"image-gallery/internal/config"
+	"image-gallery/internal/platform/cache"
 	"image-gallery/internal/platform/database"
 	"image-gallery/internal/platform/storage"
 )
@@ -22,12 +24,15 @@ import (
 type TestContainers struct {
 	PostgresContainer testcontainers.Container
 	MinioContainer    testcontainers.Container
+	RedisContainer    testcontainers.Container
 	DB                *sql.DB
 	MinioClient       *storage.MinIOClient
+	RedisClient       *cache.RedisClient
 	DatabaseURL       string
 	MinioEndpoint     string
 	MinioUsername     string
 	MinioPassword     string
+	RedisEndpoint     string
 }
 
 // SetupTestContainers initializes and starts test containers
@@ -46,6 +51,12 @@ func SetupTestContainers(ctx context.Context) (*TestContainers, error) {
 	if err := containers.setupMinio(ctx); err != nil {
 		containers.Cleanup(ctx) // Clean up postgres if minio fails
 		return nil, fmt.Errorf("failed to setup minio container: %w", err)
+	}
+
+	// Setup Redis container
+	if err := containers.setupRedis(ctx); err != nil {
+		containers.Cleanup(ctx) // Clean up other containers if redis fails
+		return nil, fmt.Errorf("failed to setup redis container: %w", err)
 	}
 
 	// Run database migrations
@@ -171,6 +182,52 @@ func (tc *TestContainers) setupMinio(ctx context.Context) error {
 	return nil
 }
 
+// setupRedis creates and starts a Valkey test container (Redis-compatible)
+func (tc *TestContainers) setupRedis(ctx context.Context) error {
+	redisContainer, err := redisModule.Run(ctx,
+		"valkey/valkey:7-alpine",
+		redisModule.WithSnapshotting(10, 1),
+		redisModule.WithLogLevel(redisModule.LogLevelVerbose),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to start valkey container: %w", err)
+	}
+
+	tc.RedisContainer = redisContainer
+
+	// Get connection string
+	endpoint, err := redisContainer.ConnectionString(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get valkey endpoint: %w", err)
+	}
+
+	tc.RedisEndpoint = endpoint
+
+	// Create Redis client using our cache implementation (Valkey is Redis-compatible)
+	cacheConfig := config.CacheConfig{
+		Enabled:     true,
+		Address:     endpoint,
+		Password:    "",
+		Database:    0,
+		DefaultTTL:  1 * time.Hour,
+		DialTimeout: 5 * time.Second,
+	}
+
+	redisClient, err := cache.NewRedisClient(cacheConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create redis client: %w", err)
+	}
+
+	tc.RedisClient = redisClient
+
+	// Test connection
+	if err := tc.RedisClient.Health(ctx); err != nil {
+		return fmt.Errorf("failed to connect to valkey: %w", err)
+	}
+
+	return nil
+}
+
 // Cleanup terminates all test containers and closes connections
 func (tc *TestContainers) Cleanup(ctx context.Context) error {
 	var errs []error
@@ -190,6 +247,18 @@ func (tc *TestContainers) Cleanup(ctx context.Context) error {
 	if tc.MinioContainer != nil {
 		if err := tc.MinioContainer.Terminate(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("failed to terminate minio container: %w", err))
+		}
+	}
+
+	if tc.RedisClient != nil {
+		if err := tc.RedisClient.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close valkey client: %w", err))
+		}
+	}
+
+	if tc.RedisContainer != nil {
+		if err := tc.RedisContainer.Terminate(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("failed to terminate valkey container: %w", err))
 		}
 	}
 
@@ -260,4 +329,23 @@ func (tc *TestContainers) CleanBucket(ctx context.Context, bucketName string) er
 	// This would clean all objects from the specified bucket
 	// Implementation depends on the storage client capabilities
 	return nil
+}
+
+// GetRedisEndpoint returns the Valkey endpoint (Redis-compatible)
+func (tc *TestContainers) GetRedisEndpoint() string {
+	return tc.RedisEndpoint
+}
+
+// FlushRedis clears all data from the Valkey test database
+func (tc *TestContainers) FlushRedis(ctx context.Context) error {
+	if tc.RedisClient == nil {
+		return fmt.Errorf("valkey client not available")
+	}
+	
+	return tc.RedisClient.FlushCache(ctx)
+}
+
+// GetRedisClient returns the Valkey client for tests (Redis-compatible)
+func (tc *TestContainers) GetRedisClient() *cache.RedisClient {
+	return tc.RedisClient
 }

@@ -6,6 +6,7 @@ import (
 
 	"image-gallery/internal/config"
 	"image-gallery/internal/domain/image"
+	"image-gallery/internal/platform/cache"
 	"image-gallery/internal/platform/database"
 	"image-gallery/internal/platform/storage"
 	"image-gallery/internal/services/implementations"
@@ -92,9 +93,22 @@ func (c *Container) initializeServices() error {
 	c.imageProcessor = implementations.NewImageProcessor()
 	c.validationService = implementations.NewValidationService()
 	
+	// Initialize cache service (optional)
+	if c.config.Cache.Enabled {
+		if redisClient, err := cache.NewRedisClient(c.config.Cache); err == nil {
+			c.cacheService = implementations.NewCacheService(redisClient)
+			log.Println("Cache service initialized with Valkey/Redis")
+		} else {
+			log.Printf("Failed to initialize cache service: %v", err)
+			c.cacheService = nil
+		}
+	} else {
+		log.Println("Cache service disabled")
+		c.cacheService = nil
+	}
+	
 	// Initialize optional services (can be nil for now)
 	c.eventPublisher = nil      // Will implement later
-	c.cacheService = nil        // Will implement later
 	c.searchService = nil       // Will implement later  
 	c.auditService = nil        // Will implement later
 	c.notificationService = nil // Will implement later
@@ -107,6 +121,7 @@ func (c *Container) initializeServices() error {
 		c.imageProcessor,
 		c.validationService,
 		c.eventPublisher,
+		c.cacheService,
 	)
 	
 	c.tagService = implementations.NewTagService(

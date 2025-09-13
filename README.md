@@ -9,6 +9,7 @@ A comprehensive image gallery application built with Go 1.25, following Test-Dri
 - **Dependency Injection**: Container-based DI for better testability
 - **Database Management**: Atlas schema management with PostgreSQL
 - **Object Storage**: MinIO S3-compatible storage for images
+- **Valkey Caching**: Performance optimization with Valkey caching layer
 - **Testcontainers**: Docker-based integration testing
 - **Modern Tooling**: Latest Go dependencies and development tools
 
@@ -56,7 +57,7 @@ cd image-gallery
 ### 2. Start Development Environment
 
 ```bash
-# Start PostgreSQL, MinIO, and Redis services
+# Start PostgreSQL, MinIO, and Valkey services
 docker-compose up -d
 
 # Verify services are running
