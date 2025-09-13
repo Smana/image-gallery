@@ -194,7 +194,7 @@ func (r *albumRepository) GetWithImageCount(ctx context.Context, pagination Pagi
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
 
 	var albums []*Album
 	for rows.Next() {
@@ -280,33 +280,8 @@ func (r *albumRepository) GetAlbumImages(ctx context.Context, albumID int, pagin
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var images []*Image
-	for rows.Next() {
-		image := &Image{}
-		err := rows.Scan(
-			&image.ID,
-			&image.Filename,
-			&image.OriginalFilename,
-			&image.ContentType,
-			&image.FileSize,
-			&image.StoragePath,
-			&image.ThumbnailPath,
-			&image.Width,
-			&image.Height,
-			&image.UploadedAt,
-			&image.Metadata,
-			&image.CreatedAt,
-			&image.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		images = append(images, image)
-	}
-
-	return images, rows.Err()
+	return scanImages(ctx, rows)
 }
 
 // GetImageAlbums retrieves all albums containing a specific image
@@ -328,7 +303,7 @@ func (r *albumRepository) ReorderImages(ctx context.Context, albumID int, imageP
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() //nolint:errcheck // Transaction cleanup
 
 	query := `UPDATE image_albums SET position = $3 WHERE album_id = $1 AND image_id = $2`
 
@@ -355,7 +330,7 @@ func (r *albumRepository) scanAlbums(ctx context.Context, query string, args ...
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
 
 	var albums []*Album
 	for rows.Next() {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"time"
 
 	"image-gallery/internal/config"
@@ -20,14 +19,14 @@ type MinIOClient struct {
 
 func NewMinIOClient(cfg config.StorageConfig) (*MinIOClient, error) {
 	var creds *credentials.Credentials
-	
+
 	// Use AWS credentials chain if no static credentials are provided
 	// This supports EKS Pod Identity, IAM roles, AWS credentials file, etc.
 	if cfg.AccessKeyID == "" || cfg.SecretAccessKey == "" {
 		creds = credentials.NewChainCredentials([]credentials.Provider{
-			&credentials.EnvAWS{},        // AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+			&credentials.EnvAWS{},             // AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
 			&credentials.FileAWSCredentials{}, // ~/.aws/credentials
-			&credentials.IAM{},           // EC2/ECS/EKS IAM roles
+			&credentials.IAM{},                // EC2/ECS/EKS IAM roles
 		})
 	} else {
 		// Fall back to static credentials for local development
@@ -87,7 +86,7 @@ func (m *MinIOClient) DeleteFile(ctx context.Context, objectName string) error {
 }
 
 func (m *MinIOClient) GetFileURL(objectName string) string {
-	return filepath.Join("/api/images", objectName, "download")
+	return "/api/images/" + objectName + "/download"
 }
 
 // ListObjects lists objects in the bucket
@@ -95,26 +94,26 @@ func (m *MinIOClient) ListObjects(ctx context.Context, prefix string, maxKeys in
 	if maxKeys <= 0 {
 		maxKeys = 1000
 	}
-	
+
 	fmt.Printf("DEBUG: MinIO ListObjects - bucket=%s, prefix=%s, maxKeys=%d\n", m.bucketName, prefix, maxKeys)
-	
+
 	options := minio.ListObjectsOptions{
-		Prefix:     prefix,
-		MaxKeys:    maxKeys,
-		Recursive:  true,
+		Prefix:    prefix,
+		MaxKeys:   maxKeys,
+		Recursive: true,
 	}
-	
+
 	objectCh := m.client.ListObjects(ctx, m.bucketName, options)
-	
-	var objects []MinIOObjectInfo
+
+	objects := make([]MinIOObjectInfo, 0, maxKeys)
 	for object := range objectCh {
 		if object.Err != nil {
 			fmt.Printf("DEBUG: MinIO ListObjects error: %v\n", object.Err)
 			return nil, fmt.Errorf("error listing objects: %w", object.Err)
 		}
-		
+
 		fmt.Printf("DEBUG: Found object: %s (size: %d, type: %s)\n", object.Key, object.Size, object.ContentType)
-		
+
 		objects = append(objects, MinIOObjectInfo{
 			Key:          object.Key,
 			Size:         object.Size,
@@ -124,7 +123,7 @@ func (m *MinIOClient) ListObjects(ctx context.Context, prefix string, maxKeys in
 			UserMetadata: object.UserMetadata,
 		})
 	}
-	
+
 	fmt.Printf("DEBUG: Total objects found: %d\n", len(objects))
 	return objects, nil
 }

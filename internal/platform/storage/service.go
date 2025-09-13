@@ -18,6 +18,11 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
+// Constants for repeated string literals
+const (
+	noSuchKeyError = "NoSuchKey"
+)
+
 // Service implements the domain StorageService interface
 type Service struct {
 	client     *minio.Client
@@ -58,7 +63,7 @@ func (s *Service) Store(ctx context.Context, filename string, contentType string
 	if filename == "" {
 		return "", errors.New("filename cannot be empty")
 	}
-	
+
 	if contentType == "" {
 		return "", errors.New("content type cannot be empty")
 	}
@@ -105,7 +110,7 @@ func (s *Service) Store(ctx context.Context, filename string, contentType string
 	// Validate upload
 	if info.Size == 0 {
 		// Clean up failed upload
-		s.client.RemoveObject(ctx, s.bucketName, storagePath, minio.RemoveObjectOptions{})
+		_ = s.client.RemoveObject(ctx, s.bucketName, storagePath, minio.RemoveObjectOptions{}) //nolint:errcheck // Cleanup operation in error path
 		return "", errors.New("uploaded file has zero size")
 	}
 
@@ -129,8 +134,8 @@ func (s *Service) Retrieve(ctx context.Context, path string) (io.ReadCloser, err
 	// Verify object exists by attempting to read stat
 	_, err = obj.Stat()
 	if err != nil {
-		obj.Close()
-		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		_ = obj.Close() //nolint:errcheck // Object cleanup in error path
+		if minio.ToErrorResponse(err).Code == noSuchKeyError {
 			return nil, fmt.Errorf("file not found: %s", path)
 		}
 		return nil, fmt.Errorf("failed to stat object: %w", err)
@@ -171,7 +176,7 @@ func (s *Service) Exists(ctx context.Context, path string) (bool, error) {
 
 	_, err := s.client.StatObject(ctx, s.bucketName, path, minio.StatObjectOptions{})
 	if err != nil {
-		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		if minio.ToErrorResponse(err).Code == noSuchKeyError {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to stat object: %w", err)
@@ -216,7 +221,7 @@ func (s *Service) GetFileInfo(ctx context.Context, path string) (*FileInfo, erro
 
 	stat, err := s.client.StatObject(ctx, s.bucketName, path, minio.StatObjectOptions{})
 	if err != nil {
-		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		if minio.ToErrorResponse(err).Code == noSuchKeyError {
 			return nil, fmt.Errorf("file not found: %s", path)
 		}
 		return nil, fmt.Errorf("failed to stat object: %w", err)
@@ -256,15 +261,15 @@ func (s *Service) ListObjects(ctx context.Context, prefix string, maxKeys int) (
 	}
 
 	options := minio.ListObjectsOptions{
-		Prefix:     prefix,
-		MaxKeys:    maxKeys,
-		Recursive:  true,
+		Prefix:       prefix,
+		MaxKeys:      maxKeys,
+		Recursive:    true,
 		WithMetadata: true,
 	}
 
 	objectCh := s.client.ListObjects(ctx, s.bucketName, options)
-	
-	var objects []ObjectInfo
+
+	objects := make([]ObjectInfo, 0, maxKeys)
 	for object := range objectCh {
 		if object.Err != nil {
 			return nil, fmt.Errorf("error listing objects: %w", object.Err)
@@ -339,19 +344,19 @@ func (s *Service) generateStoragePath(filename string) string {
 	// Create a hash-based directory structure for better distribution
 	hash := sha256.Sum256([]byte(filename + time.Now().String()))
 	hashStr := fmt.Sprintf("%x", hash)
-	
+
 	// Use first 2 characters for directory structure
 	dir1 := hashStr[:2]
 	dir2 := hashStr[2:4]
-	
+
 	// Add timestamp to ensure uniqueness
 	timestamp := time.Now().Unix()
 	ext := filepath.Ext(filename)
 	base := strings.TrimSuffix(filepath.Base(filename), ext)
-	
+
 	// Clean filename for storage
 	cleanBase := s.sanitizeFilename(base)
-	
+
 	return fmt.Sprintf("%s/%s/%s_%d%s", dir1, dir2, cleanBase, timestamp, ext)
 }
 
@@ -361,12 +366,12 @@ func (s *Service) sanitizeFilename(filename string) string {
 	sanitized = strings.ReplaceAll(sanitized, "/", "_")
 	sanitized = strings.ReplaceAll(sanitized, "\\", "_")
 	sanitized = strings.ReplaceAll(sanitized, "..", "_")
-	
+
 	// Limit length
 	if len(sanitized) > 100 {
 		sanitized = sanitized[:100]
 	}
-	
+
 	return sanitized
 }
 
@@ -403,12 +408,12 @@ type sizeCountingReader struct {
 func (r *sizeCountingReader) Read(p []byte) (n int, err error) {
 	n, err = r.reader.Read(p)
 	r.size += int64(n)
-	
+
 	// Check if we've exceeded the maximum file size
 	if r.maxSize > 0 && r.size > r.maxSize {
 		return 0, fmt.Errorf("file size exceeds maximum allowed size of %d bytes", r.maxSize)
 	}
-	
+
 	return
 }
 
@@ -453,17 +458,17 @@ func (s *Service) validateFileSecurity(filename, contentType string) error {
 	if err := s.validateFilename(filename); err != nil {
 		return err
 	}
-	
+
 	// Validate file extension matches content type
 	if err := s.validateExtensionContentType(filename, contentType); err != nil {
 		return err
 	}
-	
+
 	// Additional security checks can be added here
 	// - Blacklisted filename patterns
 	// - Suspicious file extensions
 	// - Rate limiting per IP/user (would need context)
-	
+
 	return nil
 }
 
@@ -473,17 +478,17 @@ func (s *Service) validateFilename(filename string) error {
 	if strings.Contains(filename, "..") {
 		return errors.New("path traversal attempt detected")
 	}
-	
+
 	// Check for absolute paths
 	if strings.HasPrefix(filename, "/") || strings.HasPrefix(filename, "\\") {
 		return errors.New("absolute paths not allowed")
 	}
-	
+
 	// Check for hidden files (starting with .)
 	if strings.HasPrefix(filepath.Base(filename), ".") {
 		return errors.New("hidden files not allowed")
 	}
-	
+
 	// Check for suspicious patterns
 	suspiciousPatterns := []string{
 		"<script",
@@ -493,31 +498,31 @@ func (s *Service) validateFilename(filename string) error {
 		"onload=",
 		"onerror=",
 	}
-	
+
 	lowerFilename := strings.ToLower(filename)
 	for _, pattern := range suspiciousPatterns {
 		if strings.Contains(lowerFilename, pattern) {
 			return fmt.Errorf("suspicious pattern detected: %s", pattern)
 		}
 	}
-	
+
 	// Validate filename length
 	if len(filename) > 255 {
 		return errors.New("filename too long")
 	}
-	
+
 	// Check for null bytes
 	if strings.Contains(filename, "\x00") {
 		return errors.New("null bytes not allowed in filename")
 	}
-	
+
 	return nil
 }
 
 // validateExtensionContentType ensures file extension matches declared content type
 func (s *Service) validateExtensionContentType(filename, contentType string) error {
 	ext := strings.ToLower(filepath.Ext(filename))
-	
+
 	// Map of extensions to expected content types
 	expectedTypes := map[string][]string{
 		".jpg":  {"image/jpeg", "image/jpg"},
@@ -526,7 +531,7 @@ func (s *Service) validateExtensionContentType(filename, contentType string) err
 		".gif":  {"image/gif"},
 		".webp": {"image/webp"},
 	}
-	
+
 	if expected, exists := expectedTypes[ext]; exists {
 		for _, expectedType := range expected {
 			if contentType == expectedType {
@@ -535,7 +540,7 @@ func (s *Service) validateExtensionContentType(filename, contentType string) err
 		}
 		return fmt.Errorf("content type %s does not match file extension %s", contentType, ext)
 	}
-	
+
 	return fmt.Errorf("unsupported file extension: %s", ext)
 }
 
@@ -547,23 +552,40 @@ func (s *Service) validateFileContent(data io.Reader, contentType string) (io.Re
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, fmt.Errorf("failed to read file header: %w", err)
 	}
-	
+
 	// Validate magic numbers (file signatures)
 	if err := s.validateMagicNumber(buffer[:n], contentType); err != nil {
 		return nil, err
 	}
-	
+
 	// Create new reader that includes the header we already read
 	return io.MultiReader(bytes.NewReader(buffer[:n]), data), nil
 }
 
 // validateMagicNumber checks file magic numbers against content type
 func (s *Service) validateMagicNumber(header []byte, contentType string) error {
+	if err := s.validateHeaderSize(header); err != nil {
+		return err
+	}
+
+	patterns, err := s.getMagicNumberPatterns(contentType)
+	if err != nil {
+		return err
+	}
+
+	return s.checkMagicNumberPatterns(header, contentType, patterns)
+}
+
+// validateHeaderSize checks if header is large enough for validation
+func (s *Service) validateHeaderSize(header []byte) error {
 	if len(header) < 4 {
 		return errors.New("file too small to validate")
 	}
-	
-	// Define magic number patterns
+	return nil
+}
+
+// getMagicNumberPatterns returns the magic number patterns for a content type
+func (s *Service) getMagicNumberPatterns(contentType string) ([][]byte, error) {
 	magicNumbers := map[string][][]byte{
 		"image/jpeg": {
 			{0xFF, 0xD8, 0xFF}, // JPEG
@@ -582,35 +604,63 @@ func (s *Service) validateMagicNumber(header []byte, contentType string) error {
 			{0x52, 0x49, 0x46, 0x46}, // RIFF (WebP container)
 		},
 	}
-	
+
 	patterns, exists := magicNumbers[contentType]
 	if !exists {
-		return fmt.Errorf("magic number validation not supported for content type: %s", contentType)
+		return nil, fmt.Errorf("magic number validation not supported for content type: %s", contentType)
 	}
-	
+	return patterns, nil
+}
+
+// checkMagicNumberPatterns validates header against all patterns for content type
+func (s *Service) checkMagicNumberPatterns(header []byte, contentType string, patterns [][]byte) error {
 	for _, pattern := range patterns {
-		if len(header) >= len(pattern) {
-			match := true
-			for i, b := range pattern {
-				if header[i] != b {
-					match = false
-					break
-				}
+		if s.matchesPattern(header, pattern) {
+			if err := s.validateSpecialCases(header, contentType); err != nil {
+				continue // Try next pattern if special validation fails
 			}
-			if match {
-				// For WebP, need additional validation
-				if contentType == "image/webp" && len(header) >= 12 {
-					// Check for WEBP signature at offset 8
-					if !(header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50) {
-						continue
-					}
-				}
-				return nil
-			}
+			return nil // Valid match found
 		}
 	}
-	
 	return fmt.Errorf("file content does not match declared content type %s", contentType)
+}
+
+// matchesPattern checks if header matches a specific magic number pattern
+func (s *Service) matchesPattern(header []byte, pattern []byte) bool {
+	if len(header) < len(pattern) {
+		return false
+	}
+
+	for i, b := range pattern {
+		if header[i] != b {
+			return false
+		}
+	}
+	return true
+}
+
+// validateSpecialCases handles content type specific additional validations
+func (s *Service) validateSpecialCases(header []byte, contentType string) error {
+	if contentType == "image/webp" {
+		return s.validateWebPSignature(header)
+	}
+	return nil
+}
+
+// validateWebPSignature validates the WebP signature at offset 8
+func (s *Service) validateWebPSignature(header []byte) error {
+	if len(header) < 12 {
+		return errors.New("header too short for WebP validation")
+	}
+
+	// Check for WEBP signature at offset 8
+	webpSignature := []byte{0x57, 0x45, 0x42, 0x50} // "WEBP"
+	for i, b := range webpSignature {
+		if header[8+i] != b {
+			return errors.New("invalid WebP signature")
+		}
+	}
+	return nil
 }
 
 // getMaxFileSize returns the maximum allowed file size in bytes

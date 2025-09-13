@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+// Constants for repeated string literals
+const (
+	minioadminCredential = "minioadmin"
+)
+
 // ValidationError represents a configuration validation error
 type ValidationError struct {
 	Field   string
@@ -29,7 +34,7 @@ func (ve ValidationErrors) Error() string {
 		return "no validation errors"
 	}
 
-	var messages []string
+	messages := make([]string, 0, len(ve))
 	for _, err := range ve {
 		messages = append(messages, err.Error())
 	}
@@ -219,7 +224,7 @@ func (c *Config) validateStorage() ValidationErrors {
 	// Allow empty credentials for EKS Pod Identity / IAM roles
 	if c.Environment == "production" {
 		// Only warn about minioadmin credentials, allow empty for IAM roles
-		if c.Storage.AccessKeyID == "minioadmin" {
+		if c.Storage.AccessKeyID == minioadminCredential {
 			errors = append(errors, ValidationError{
 				Field:   "storage.access_key_id",
 				Value:   c.Storage.AccessKeyID,
@@ -227,7 +232,7 @@ func (c *Config) validateStorage() ValidationErrors {
 			})
 		}
 
-		if c.Storage.SecretAccessKey == "minioadmin" {
+		if c.Storage.SecretAccessKey == minioadminCredential {
 			errors = append(errors, ValidationError{
 				Field:   "storage.secret_access_key",
 				Value:   "[REDACTED]",
@@ -340,16 +345,27 @@ func (c *Config) validateServerTimeouts() ValidationErrors {
 
 // isValidBucketName validates S3/MinIO bucket naming rules
 func isValidBucketName(name string) bool {
-	if len(name) < 3 || len(name) > 63 {
+	return isValidBucketLength(name) &&
+		hasValidBucketBoundaries(name) &&
+		hasValidBucketCharacters(name) &&
+		!isIPAddressFormat(name)
+}
+
+// isValidBucketLength checks if bucket name length is within S3 limits
+func isValidBucketLength(name string) bool {
+	return len(name) >= 3 && len(name) <= 63
+}
+
+// hasValidBucketBoundaries checks if bucket name starts and ends with valid characters
+func hasValidBucketBoundaries(name string) bool {
+	if name == "" {
 		return false
 	}
+	return isLowerAlphaNum(name[0]) && isLowerAlphaNum(name[len(name)-1])
+}
 
-	// Must start and end with lowercase letter or number
-	if !isLowerAlphaNum(name[0]) || !isLowerAlphaNum(name[len(name)-1]) {
-		return false
-	}
-
-	// Check each character
+// hasValidBucketCharacters validates all characters in bucket name
+func hasValidBucketCharacters(name string) bool {
 	for i, r := range name {
 		if !isLowerAlphaNum(byte(r)) && r != '-' {
 			return false
@@ -360,22 +376,21 @@ func isValidBucketName(name string) bool {
 			return false
 		}
 	}
+	return true
+}
 
-	// Cannot be formatted as IP address (simplified check)
+// isIPAddressFormat checks if the bucket name looks like an IP address
+func isIPAddressFormat(name string) bool {
 	parts := strings.Split(name, ".")
-	if len(parts) == 4 {
-		allNumbers := true
-		for _, part := range parts {
-			if _, err := strconv.Atoi(part); err != nil {
-				allNumbers = false
-				break
-			}
-		}
-		if allNumbers {
+	if len(parts) != 4 {
+		return false
+	}
+
+	for _, part := range parts {
+		if _, err := strconv.Atoi(part); err != nil {
 			return false
 		}
 	}
-
 	return true
 }
 

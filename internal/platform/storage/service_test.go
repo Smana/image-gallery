@@ -16,6 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants for repeated string literals
+const (
+	testContent = "hello world"
+)
+
 func TestNewService(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -117,12 +122,8 @@ func TestService_Store(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-			} else {
-				// Would succeed with a real MinIO client
-				// In this case, we expect panic/error due to nil client
-				if err == nil {
-					t.Log("Store succeeded unexpectedly (should fail with nil client)")
-				}
+			} else if err != nil {
+				t.Log("Store succeeded unexpectedly (should fail with nil client)")
 			}
 		})
 	}
@@ -316,14 +317,14 @@ func TestService_generateStoragePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := service.generateStoragePath(tt.filename)
-			
+
 			// Should not be empty
 			assert.NotEmpty(t, path)
-			
+
 			// Should contain directory structure (xx/yy/)
 			parts := strings.Split(path, "/")
 			assert.GreaterOrEqual(t, len(parts), 3, "Should have at least 3 parts: dir1/dir2/filename")
-			
+
 			// Should preserve extension
 			originalExt := strings.ToLower(filepath.Ext(tt.filename))
 			if originalExt != "" {
@@ -338,7 +339,7 @@ func TestService_generateStoragePath(t *testing.T) {
 		path1 := service.generateStoragePath(filename)
 		time.Sleep(1 * time.Millisecond) // Ensure different timestamp
 		path2 := service.generateStoragePath(filename)
-		
+
 		assert.NotEqual(t, path1, path2, "Should generate unique paths for same filename")
 	})
 }
@@ -409,7 +410,7 @@ func TestService_isValidContentType(t *testing.T) {
 }
 
 func TestSizeCountingReader(t *testing.T) {
-	data := "hello world"
+	data := testContent
 	reader := &sizeCountingReader{
 		reader: strings.NewReader(data),
 		size:   0,
@@ -424,15 +425,17 @@ func TestSizeCountingReader(t *testing.T) {
 	assert.Equal(t, "hello", string(buffer))
 
 	// Read remaining data
-	buffer = make([]byte, 10)
-	n, err = reader.Read(buffer)
-	
-	// Should be EOF or remaining data
-	assert.Equal(t, int64(11), reader.size)
+	remainingBuffer := make([]byte, 10)
+	n, err = reader.Read(remainingBuffer)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 6, n)                   // " world" is 6 characters
+	assert.Equal(t, int64(11), reader.size) // Total size should now be 11
+	assert.Equal(t, " world", string(remainingBuffer[:n]))
 }
 
 func TestHashingReader(t *testing.T) {
-	data := "hello world"
+	data := testContent
 	reader := &hashingReader{
 		reader: strings.NewReader(data),
 		hasher: sha256.New(),
@@ -559,7 +562,7 @@ func TestService_MagicNumberValidation(t *testing.T) {
 		// Create data with wrong magic number
 		fakeData := []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09}
 		fakeData = append(fakeData, make([]byte, 100)...)
-		
+
 		_, err := service.Store(context.Background(), "test.jpg", "image/jpeg", bytes.NewReader(fakeData))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "file content does not match declared content type")
@@ -567,7 +570,7 @@ func TestService_MagicNumberValidation(t *testing.T) {
 
 	t.Run("file too small", func(t *testing.T) {
 		smallData := []byte{0x01, 0x02}
-		
+
 		_, err := service.Store(context.Background(), "test.jpg", "image/jpeg", bytes.NewReader(smallData))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "file too small to validate")
@@ -625,7 +628,7 @@ func TestService_FileSizeValidation(t *testing.T) {
 
 		buffer := make([]byte, 600) // Try to read more than limit
 		_, err := reader.Read(buffer)
-		
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "file size exceeds maximum allowed size")
 	})
@@ -635,7 +638,7 @@ func TestService_FileSizeValidation(t *testing.T) {
 			bucketName: "test-bucket",
 			config:     &config.StorageConfig{BucketName: "test-bucket"},
 		}
-		
+
 		maxSize := service.getMaxFileSize()
 		assert.Equal(t, int64(10*1024*1024), maxSize) // Should be 10MB
 	})
@@ -667,7 +670,7 @@ func TestServiceIntegration(t *testing.T) {
 
 	t.Run("store and retrieve", func(t *testing.T) {
 		data := strings.NewReader("test file content")
-		
+
 		path, err := service.Store(ctx, "test.txt", "text/plain", data)
 		if err != nil {
 			t.Skipf("Store failed (expected with text/plain): %v", err)
@@ -675,12 +678,12 @@ func TestServiceIntegration(t *testing.T) {
 
 		if path != "" {
 			// Clean up
-			defer service.Delete(ctx, path)
+			defer func() { _ = service.Delete(ctx, path) }()
 
 			// Test retrieval
 			reader, err := service.Retrieve(ctx, path)
 			require.NoError(t, err)
-			defer reader.Close()
+			defer func() { _ = reader.Close() }() //nolint:errcheck // Resource cleanup
 
 			content, err := io.ReadAll(reader)
 			require.NoError(t, err)

@@ -18,16 +18,19 @@ import (
 // ImageServiceIntegrationTestSuite provides integration testing for the ImageService
 type ImageServiceIntegrationTestSuite struct {
 	suite.Suite
-	testSuite   *testutils.TestSuite
-	ctx         context.Context
-	container   *services.Container
+	testSuite    *testutils.TestSuite
+	ctx          context.Context
+	container    *services.Container
 	imageService image.ImageService
 }
 
 // SetupSuite sets up the test suite with real containers
 func (s *ImageServiceIntegrationTestSuite) SetupSuite() {
+	if testing.Short() {
+		s.T().Skip("Skipping integration tests in short mode")
+	}
 	s.ctx = context.Background()
-	
+
 	// Setup test containers
 	testSuite, err := testutils.SetupTestSuite(s.ctx)
 	require.NoError(s.T(), err, "Failed to setup test suite")
@@ -67,12 +70,12 @@ func (s *ImageServiceIntegrationTestSuite) TestCreateImage_Success() {
 		Height:           &[]int{600}[0],
 		Tags:             []string{"nature", "landscape"},
 	}
-	
+
 	imageData := testutils.GenerateTestImageData(800, 600)
-	
+
 	// When: Creating an image
 	createdImage, err := s.imageService.CreateImage(s.ctx, req, strings.NewReader(string(imageData)))
-	
+
 	// Then: Image should be created successfully
 	require.NoError(s.T(), err, "Image creation should not fail")
 	assert.NotNil(s.T(), createdImage, "Created image should not be nil")
@@ -82,7 +85,7 @@ func (s *ImageServiceIntegrationTestSuite) TestCreateImage_Success() {
 	assert.Equal(s.T(), req.FileSize, createdImage.FileSize)
 	assert.NotEmpty(s.T(), createdImage.StoragePath, "Storage path should be set")
 	assert.NotZero(s.T(), createdImage.CreatedAt, "CreatedAt should be set")
-	
+
 	// Verify tags were associated
 	assert.Len(s.T(), createdImage.Tags, 2, "Image should have 2 tags")
 	tagNames := make([]string, len(createdImage.Tags))
@@ -101,12 +104,12 @@ func (s *ImageServiceIntegrationTestSuite) TestCreateImage_ValidationFailure() {
 		ContentType:      "image/jpeg",
 		FileSize:         1024,
 	}
-	
+
 	imageData := testutils.GenerateTestImageData(100, 100)
-	
+
 	// When: Attempting to create an image
 	createdImage, err := s.imageService.CreateImage(s.ctx, req, strings.NewReader(string(imageData)))
-	
+
 	// Then: Creation should fail with validation error
 	assert.Error(s.T(), err, "Image creation should fail with invalid data")
 	assert.Nil(s.T(), createdImage, "No image should be created")
@@ -118,10 +121,10 @@ func (s *ImageServiceIntegrationTestSuite) TestGetImage_Success() {
 	// Given: An existing image in the database
 	testImage, err := s.testSuite.CreateTestImage(s.ctx, "existing-image")
 	require.NoError(s.T(), err, "Failed to create test image")
-	
+
 	// When: Retrieving the image
 	retrievedImage, err := s.imageService.GetImage(s.ctx, testImage.ID)
-	
+
 	// Then: Image should be retrieved successfully
 	require.NoError(s.T(), err, "Image retrieval should not fail")
 	assert.NotNil(s.T(), retrievedImage, "Retrieved image should not be nil")
@@ -134,10 +137,10 @@ func (s *ImageServiceIntegrationTestSuite) TestGetImage_Success() {
 func (s *ImageServiceIntegrationTestSuite) TestGetImage_NotFound() {
 	// Given: A non-existent image ID
 	nonExistentID := 99999
-	
+
 	// When: Attempting to retrieve the image
 	retrievedImage, err := s.imageService.GetImage(s.ctx, nonExistentID)
-	
+
 	// Then: Retrieval should fail with not found error
 	assert.Error(s.T(), err, "Image retrieval should fail for non-existent image")
 	assert.Nil(s.T(), retrievedImage, "No image should be retrieved")
@@ -151,15 +154,15 @@ func (s *ImageServiceIntegrationTestSuite) TestListImages_WithPagination() {
 		_, err := s.testSuite.CreateTestImage(s.ctx, fmt.Sprintf("image-%d", i))
 		require.NoError(s.T(), err, "Failed to create test image %d", i)
 	}
-	
+
 	// When: Listing images with pagination
 	req := &image.ListImagesRequest{
 		Page:     1,
 		PageSize: 3,
 	}
-	
+
 	response, err := s.imageService.ListImages(s.ctx, req)
-	
+
 	// Then: Images should be listed with correct pagination
 	require.NoError(s.T(), err, "Image listing should not fail")
 	assert.NotNil(s.T(), response, "Response should not be nil")
@@ -175,13 +178,13 @@ func (s *ImageServiceIntegrationTestSuite) TestDeleteImage_Success() {
 	// Given: An existing image in the database
 	testImage, err := s.testSuite.CreateTestImage(s.ctx, "image-to-delete")
 	require.NoError(s.T(), err, "Failed to create test image")
-	
+
 	// When: Deleting the image
 	err = s.imageService.DeleteImage(s.ctx, testImage.ID)
-	
+
 	// Then: Deletion should succeed
 	require.NoError(s.T(), err, "Image deletion should not fail")
-	
+
 	// And: Image should no longer exist
 	deletedImage, err := s.imageService.GetImage(s.ctx, testImage.ID)
 	assert.Error(s.T(), err, "Getting deleted image should fail")
@@ -193,38 +196,38 @@ func (s *ImageServiceIntegrationTestSuite) TestImageWithTags_Integration() {
 	// Given: Image creation request with tags
 	req := &image.CreateImageRequest{
 		OriginalFilename: "tagged-image.jpg",
-		ContentType:      "image/jpeg", 
+		ContentType:      "image/jpeg",
 		FileSize:         2048,
 		Tags:             []string{"integration", "test", "lifecycle"},
 	}
-	
+
 	imageData := testutils.GenerateTestImageData(400, 300)
-	
+
 	// When: Creating image with tags
 	createdImage, err := s.imageService.CreateImage(s.ctx, req, strings.NewReader(string(imageData)))
 	require.NoError(s.T(), err, "Image creation with tags should succeed")
-	
+
 	// Then: Image should have all tags
 	assert.Len(s.T(), createdImage.Tags, 3, "Image should have 3 tags")
-	
+
 	// When: Retrieving the image
 	retrievedImage, err := s.imageService.GetImage(s.ctx, createdImage.ID)
 	require.NoError(s.T(), err, "Image retrieval should succeed")
-	
+
 	// Then: Retrieved image should maintain tag associations
 	assert.Len(s.T(), retrievedImage.Tags, 3, "Retrieved image should have 3 tags")
-	
+
 	// When: Updating image tags
 	updateReq := &image.UpdateImageRequest{
 		Tags: []string{"integration", "updated"}, // Remove "test", "lifecycle", add "updated"
 	}
-	
+
 	updatedImage, err := s.imageService.UpdateImage(s.ctx, createdImage.ID, updateReq)
 	require.NoError(s.T(), err, "Image update should succeed")
-	
+
 	// Then: Image should have updated tags
 	assert.Len(s.T(), updatedImage.Tags, 2, "Updated image should have 2 tags")
-	
+
 	tagNames := make([]string, len(updatedImage.Tags))
 	for i, tag := range updatedImage.Tags {
 		tagNames[i] = tag.Name
@@ -245,10 +248,10 @@ func (s *ImageServiceIntegrationTestSuite) TestImageStats_Integration() {
 		tags        []string
 	}{
 		{"jpg-image.jpg", "image/jpeg", 1024, []string{"jpg", "small"}},
-		{"png-image.png", "image/png", 2048, []string{"png", "medium"}}, 
+		{"png-image.png", "image/png", 2048, []string{"png", "medium"}},
 		{"large-jpg.jpg", "image/jpeg", 5120, []string{"jpg", "large"}},
 	}
-	
+
 	for _, img := range images {
 		req := &image.CreateImageRequest{
 			OriginalFilename: img.filename,
@@ -260,23 +263,22 @@ func (s *ImageServiceIntegrationTestSuite) TestImageStats_Integration() {
 		_, err := s.imageService.CreateImage(s.ctx, req, strings.NewReader(string(imageData)))
 		require.NoError(s.T(), err, "Failed to create test image %s", img.filename)
 	}
-	
+
 	// When: Getting image statistics
 	stats, err := s.imageService.GetImageStats(s.ctx)
-	
+
 	// Then: Statistics should reflect the created images
 	require.NoError(s.T(), err, "Getting image stats should not fail")
 	assert.NotNil(s.T(), stats, "Stats should not be nil")
 	assert.Equal(s.T(), int64(3), stats.TotalImages, "Should have 3 total images")
 	assert.Equal(s.T(), int64(1024+2048+5120), stats.TotalSize, "Total size should be sum of all images")
-	
+
 	// Verify content type distribution
 	assert.Contains(s.T(), stats.ContentTypes, "image/jpeg")
 	assert.Contains(s.T(), stats.ContentTypes, "image/png")
 	assert.Equal(s.T(), int64(2), stats.ContentTypes["image/jpeg"]) // 2 JPEG images
 	assert.Equal(s.T(), int64(1), stats.ContentTypes["image/png"])  // 1 PNG image
 }
-
 
 // TestRunner function to run the integration test suite
 func TestImageServiceIntegration(t *testing.T) {
@@ -290,7 +292,7 @@ func BenchmarkImageService_CreateImage(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to setup test suite: %v", err)
 	}
-	defer testSuite.Cleanup(ctx)
+	defer func() { _ = testSuite.Cleanup(ctx) }()
 
 	container, err := services.NewContainerForTest(&services.TestConfig{
 		DatabaseURL: testSuite.Containers.GetDatabaseURL(),
@@ -312,7 +314,7 @@ func BenchmarkImageService_CreateImage(b *testing.B) {
 				FileSize:         int64(len(imageData)),
 				Tags:             []string{"benchmark"},
 			}
-			
+
 			_, err := imageService.CreateImage(ctx, req, strings.NewReader(string(imageData)))
 			if err != nil {
 				b.Fatalf("Image creation failed: %v", err)

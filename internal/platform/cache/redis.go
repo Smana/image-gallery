@@ -55,21 +55,30 @@ func NewRedisClient(cfg config.CacheConfig) (*RedisClient, error) {
 	}, nil
 }
 
-// GetImage retrieves a cached image
-func (r *RedisClient) GetImage(ctx context.Context, id int) (*image.Image, error) {
-	key := fmt.Sprintf("image:%d", id)
-	
+// getCachedValue is a helper method to get and unmarshal cached values
+func (r *RedisClient) getCachedValue(ctx context.Context, key, notFoundMsg, getErrMsg, unmarshalErrMsg string, result interface{}) error {
 	val, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return nil, fmt.Errorf("image not found in cache")
+			return fmt.Errorf("%s", notFoundMsg)
 		}
-		return nil, fmt.Errorf("failed to get image from cache: %w", err)
+		return fmt.Errorf("%s: %w", getErrMsg, err)
 	}
 
+	if err := json.Unmarshal([]byte(val), result); err != nil {
+		return fmt.Errorf("%s: %w", unmarshalErrMsg, err)
+	}
+
+	return nil
+}
+
+// GetImage retrieves a cached image
+func (r *RedisClient) GetImage(ctx context.Context, id int) (*image.Image, error) {
+	key := fmt.Sprintf("image:%d", id)
 	var img image.Image
-	if err := json.Unmarshal([]byte(val), &img); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal cached image: %w", err)
+
+	if err := r.getCachedValue(ctx, key, "image not found in cache", "failed to get image from cache", "failed to unmarshal cached image", &img); err != nil {
+		return nil, err
 	}
 
 	return &img, nil
@@ -78,7 +87,7 @@ func (r *RedisClient) GetImage(ctx context.Context, id int) (*image.Image, error
 // SetImage caches an image
 func (r *RedisClient) SetImage(ctx context.Context, img *image.Image, expiry int64) error {
 	key := fmt.Sprintf("image:%d", img.ID)
-	
+
 	data, err := json.Marshal(img)
 	if err != nil {
 		return fmt.Errorf("failed to marshal image: %w", err)
@@ -101,7 +110,7 @@ func (r *RedisClient) SetImage(ctx context.Context, img *image.Image, expiry int
 // DeleteImage removes an image from cache
 func (r *RedisClient) DeleteImage(ctx context.Context, id int) error {
 	key := fmt.Sprintf("image:%d", id)
-	
+
 	if err := r.client.Del(ctx, key).Err(); err != nil {
 		return fmt.Errorf("failed to delete image from cache: %w", err)
 	}
@@ -112,18 +121,10 @@ func (r *RedisClient) DeleteImage(ctx context.Context, id int) error {
 // GetImageList retrieves a cached image list
 func (r *RedisClient) GetImageList(ctx context.Context, key string) (*image.ListImagesResponse, error) {
 	cacheKey := fmt.Sprintf("image_list:%s", key)
-	
-	val, err := r.client.Get(ctx, cacheKey).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return nil, fmt.Errorf("image list not found in cache")
-		}
-		return nil, fmt.Errorf("failed to get image list from cache: %w", err)
-	}
-
 	var response image.ListImagesResponse
-	if err := json.Unmarshal([]byte(val), &response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal cached image list: %w", err)
+
+	if err := r.getCachedValue(ctx, cacheKey, "image list not found in cache", "failed to get image list from cache", "failed to unmarshal cached image list", &response); err != nil {
+		return nil, err
 	}
 
 	return &response, nil
@@ -132,7 +133,7 @@ func (r *RedisClient) GetImageList(ctx context.Context, key string) (*image.List
 // SetImageList caches an image list
 func (r *RedisClient) SetImageList(ctx context.Context, key string, response *image.ListImagesResponse, expiry int64) error {
 	cacheKey := fmt.Sprintf("image_list:%s", key)
-	
+
 	data, err := json.Marshal(response)
 	if err != nil {
 		return fmt.Errorf("failed to marshal image list: %w", err)
@@ -155,7 +156,7 @@ func (r *RedisClient) SetImageList(ctx context.Context, key string, response *im
 // InvalidateImageLists clears cached image lists
 func (r *RedisClient) InvalidateImageLists(ctx context.Context) error {
 	pattern := "image_list:*"
-	
+
 	keys, err := r.client.Keys(ctx, pattern).Result()
 	if err != nil {
 		return fmt.Errorf("failed to get cache keys: %w", err)
@@ -173,18 +174,10 @@ func (r *RedisClient) InvalidateImageLists(ctx context.Context) error {
 // GetStats retrieves cached statistics
 func (r *RedisClient) GetStats(ctx context.Context, key string) (interface{}, error) {
 	cacheKey := fmt.Sprintf("stats:%s", key)
-	
-	val, err := r.client.Get(ctx, cacheKey).Result()
-	if err != nil {
-		if err == redis.Nil {
-			return nil, fmt.Errorf("stats not found in cache")
-		}
-		return nil, fmt.Errorf("failed to get stats from cache: %w", err)
-	}
-
 	var stats interface{}
-	if err := json.Unmarshal([]byte(val), &stats); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal cached stats: %w", err)
+
+	if err := r.getCachedValue(ctx, cacheKey, "stats not found in cache", "failed to get stats from cache", "failed to unmarshal cached stats", &stats); err != nil {
+		return nil, err
 	}
 
 	return stats, nil
@@ -193,7 +186,7 @@ func (r *RedisClient) GetStats(ctx context.Context, key string) (interface{}, er
 // SetStats caches statistics
 func (r *RedisClient) SetStats(ctx context.Context, key string, stats interface{}, expiry int64) error {
 	cacheKey := fmt.Sprintf("stats:%s", key)
-	
+
 	data, err := json.Marshal(stats)
 	if err != nil {
 		return fmt.Errorf("failed to marshal stats: %w", err)
@@ -254,7 +247,7 @@ func (r *RedisClient) FlushCache(ctx context.Context) error {
 
 // GenerateListKey generates a consistent cache key for image lists
 func GenerateListKey(req *image.ListImagesRequest) string {
-	return fmt.Sprintf("page_%d_pagesize_%d_tag_%s", 
+	return fmt.Sprintf("page_%d_pagesize_%d_tag_%s",
 		req.Page, req.PageSize, req.Tag)
 }
 

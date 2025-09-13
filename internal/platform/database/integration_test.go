@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -14,6 +15,9 @@ import (
 // Integration test helpers and setup functions
 
 func setupTestDatabase(t *testing.T) *sql.DB {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
 	testDBURL := os.Getenv("TEST_DATABASE_URL")
 	if testDBURL == "" {
 		t.Skip("TEST_DATABASE_URL not set, skipping integration test")
@@ -32,37 +36,6 @@ func setupTestDatabase(t *testing.T) *sql.DB {
 	return db
 }
 
-func seedTestData(t *testing.T, db *sql.DB) {
-	// Insert test images
-	testImages := []struct {
-		filename    string
-		contentType string
-		fileSize    int64
-		storagePath string
-		width       *int
-		height      *int
-	}{
-		{"test1.jpg", "image/jpeg", 1024, "/storage/test1.jpg", intPtr(800), intPtr(600)},
-		{"test2.png", "image/png", 2048, "/storage/test2.png", intPtr(1024), intPtr(768)},
-		{"test3.gif", "image/gif", 512, "/storage/test3.gif", nil, nil},
-	}
-
-	for _, img := range testImages {
-		_, err := db.Exec(`
-			INSERT INTO images (filename, original_filename, content_type, file_size, storage_path, width, height)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, img.filename, img.filename, img.contentType, img.fileSize, img.storagePath, img.width, img.height)
-		require.NoError(t, err, "Failed to insert test image %s", img.filename)
-	}
-
-	// Insert test tags
-	testTags := []string{"nature", "landscape", "portrait", "urban"}
-	for _, tag := range testTags {
-		_, err := db.Exec("INSERT INTO tags (name) VALUES ($1)", tag)
-		require.NoError(t, err, "Failed to insert test tag %s", tag)
-	}
-}
-
 func intPtr(i int) *int {
 	return &i
 }
@@ -71,7 +44,7 @@ func intPtr(i int) *int {
 
 func TestDatabaseIntegration_FullWorkflow(t *testing.T) {
 	db := setupTestDatabase(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	repo := NewImageRepository(db)
 
@@ -84,17 +57,17 @@ func TestDatabaseIntegration_FullWorkflow(t *testing.T) {
 		StoragePath:      "/storage/integration_test.jpg",
 		Width:            intPtr(1200),
 		Height:           intPtr(900),
-		Metadata:         []byte(`{"camera": "Canon EOS", "iso": 100}`),
+		Metadata:         map[string]interface{}{"camera": "Canon EOS", "iso": 100},
 	}
 
-	err := repo.Create(newImage)
+	err := repo.Create(context.Background(), newImage)
 	require.NoError(t, err)
 	assert.Greater(t, newImage.ID, 0, "Should have assigned ID")
 	assert.False(t, newImage.CreatedAt.IsZero(), "Should have set created_at")
 	assert.False(t, newImage.UploadedAt.IsZero(), "Should have set uploaded_at")
 
 	// Test GetByID
-	retrieved, err := repo.GetByID(newImage.ID)
+	retrieved, err := repo.GetByID(context.Background(), newImage.ID)
 	require.NoError(t, err)
 	require.NotNil(t, retrieved)
 	assert.Equal(t, newImage.ID, retrieved.ID)
@@ -104,24 +77,24 @@ func TestDatabaseIntegration_FullWorkflow(t *testing.T) {
 	assert.Equal(t, *newImage.Height, *retrieved.Height)
 
 	// Test List
-	images, err := repo.List(10, 0)
+	images, err := repo.List(context.Background(), PaginationParams{Limit: 10, Offset: 0}, DefaultSort())
 	require.NoError(t, err)
 	assert.Len(t, images, 1, "Should have one image")
 	assert.Equal(t, newImage.ID, images[0].ID)
 
 	// Test Delete
-	err = repo.Delete(newImage.ID)
+	err = repo.Delete(context.Background(), newImage.ID)
 	require.NoError(t, err)
 
 	// Verify deletion
-	deleted, err := repo.GetByID(newImage.ID)
+	deleted, err := repo.GetByID(context.Background(), newImage.ID)
 	require.NoError(t, err)
 	assert.Nil(t, deleted, "Image should be deleted")
 }
 
 func TestDatabaseIntegration_ConcurrentOperations(t *testing.T) {
 	db := setupTestDatabase(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	repo := NewImageRepository(db)
 	numWorkers := 10
@@ -141,7 +114,7 @@ func TestDatabaseIntegration_ConcurrentOperations(t *testing.T) {
 				StoragePath:      fmt.Sprintf("/storage/concurrent_test_%d.jpg", id),
 			}
 
-			if err := repo.Create(img); err != nil {
+			if err := repo.Create(context.Background(), img); err != nil {
 				errors <- err
 			}
 		}(i)
@@ -159,14 +132,14 @@ func TestDatabaseIntegration_ConcurrentOperations(t *testing.T) {
 	}
 
 	// Verify all images were created
-	images, err := repo.List(20, 0)
+	images, err := repo.List(context.Background(), PaginationParams{Limit: 20, Offset: 0}, DefaultSort())
 	require.NoError(t, err)
 	assert.Len(t, images, numWorkers, "Should have created all images concurrently")
 }
 
 func TestDatabaseIntegration_TransactionBehavior(t *testing.T) {
 	db := setupTestDatabase(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	// Test successful transaction
 	tx, err := db.Begin()
@@ -212,7 +185,7 @@ func TestDatabaseIntegration_LargeDataSet(t *testing.T) {
 	}
 
 	db := setupTestDatabase(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	repo := NewImageRepository(db)
 
@@ -229,7 +202,7 @@ func TestDatabaseIntegration_LargeDataSet(t *testing.T) {
 				StoragePath:      fmt.Sprintf("/storage/large_test_%d.jpg", imageID),
 			}
 
-			err := repo.Create(img)
+			err := repo.Create(context.Background(), img)
 			require.NoError(t, err, "Failed to create image %d", imageID)
 		}
 	}
@@ -240,7 +213,7 @@ func TestDatabaseIntegration_LargeDataSet(t *testing.T) {
 
 	var allImages []*Image
 	for offset := 0; offset < totalImages; offset += pageSize {
-		images, err := repo.List(pageSize, offset)
+		images, err := repo.List(context.Background(), PaginationParams{Limit: pageSize, Offset: offset}, DefaultSort())
 		require.NoError(t, err)
 		allImages = append(allImages, images...)
 	}
@@ -258,7 +231,7 @@ func TestDatabaseIntegration_LargeDataSet(t *testing.T) {
 
 func TestDatabaseIntegration_ErrorHandling(t *testing.T) {
 	db := setupTestDatabase(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	repo := NewImageRepository(db)
 
@@ -271,7 +244,7 @@ func TestDatabaseIntegration_ErrorHandling(t *testing.T) {
 		StoragePath:      "/storage/duplicate_test.jpg",
 	}
 
-	err := repo.Create(img1)
+	err := repo.Create(context.Background(), img1)
 	require.NoError(t, err)
 
 	// Test invalid foreign key constraint
@@ -288,7 +261,7 @@ func TestDatabaseIntegration_ErrorHandling(t *testing.T) {
 	}
 
 	// Should not cause SQL injection, just store the malicious string as data
-	err = repo.Create(maliciousImg)
+	err = repo.Create(context.Background(), maliciousImg)
 	assert.NoError(t, err, "Should handle malicious input safely")
 
 	// Verify tables still exist
@@ -300,7 +273,7 @@ func TestDatabaseIntegration_ErrorHandling(t *testing.T) {
 
 func TestDatabaseIntegration_ConnectionPooling(t *testing.T) {
 	db := setupTestDatabase(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	// Configure connection pool
 	db.SetMaxOpenConns(5)

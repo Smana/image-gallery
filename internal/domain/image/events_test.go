@@ -9,12 +9,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants for repeated string literals
+const (
+	testUserID    = "user123"
+	testIPAddress = "192.168.1.1"
+	testFilename  = "test.jpg"
+	testTagNature = "nature"
+)
+
 func TestNewImageCreatedEvent(t *testing.T) {
 	// Create test image
 	testTime := time.Now()
 	image := &Image{
 		ID:               1,
-		Filename:         "test.jpg",
+		Filename:         testFilename,
 		OriginalFilename: "original_test.jpg",
 		ContentType:      "image/jpeg",
 		FileSize:         1024,
@@ -22,7 +30,7 @@ func TestNewImageCreatedEvent(t *testing.T) {
 		Width:            intPtr(800),
 		Height:           intPtr(600),
 		Tags: []Tag{
-			{Name: "nature"},
+			{Name: testTagNature},
 			{Name: "landscape"},
 		},
 		Metadata:   json.RawMessage(`{"camera": "Canon"}`),
@@ -31,7 +39,7 @@ func TestNewImageCreatedEvent(t *testing.T) {
 		UpdatedAt:  testTime,
 	}
 
-	userID := "user123"
+	userID := testUserID
 	event := NewImageCreatedEvent(image, userID)
 
 	assert.Equal(t, image.ID, event.ImageID)
@@ -43,7 +51,7 @@ func TestNewImageCreatedEvent(t *testing.T) {
 	assert.Equal(t, image.Width, event.Width)
 	assert.Equal(t, image.Height, event.Height)
 	assert.Equal(t, userID, event.UserID)
-	assert.Equal(t, []string{"nature", "landscape"}, event.Tags)
+	assert.Equal(t, []string{testTagNature, "landscape"}, event.Tags)
 	assert.NotNil(t, event.Metadata)
 	assert.False(t, event.Timestamp.IsZero())
 
@@ -56,20 +64,20 @@ func TestNewImageCreatedEvent(t *testing.T) {
 func TestNewImageCreatedEvent_EmptyMetadata(t *testing.T) {
 	image := &Image{
 		ID:               1,
-		Filename:         "test.jpg",
-		OriginalFilename: "test.jpg",
+		Filename:         testFilename,
+		OriginalFilename: testFilename,
 		ContentType:      "image/jpeg",
 		FileSize:         1024,
 		StoragePath:      "/storage/test.jpg",
 	}
 
-	event := NewImageCreatedEvent(image, "user123")
+	event := NewImageCreatedEvent(image, testUserID)
 	assert.Nil(t, event.Metadata)
 }
 
 func TestNewImageUpdatedEvent(t *testing.T) {
 	imageID := 1
-	updatedBy := "user123"
+	updatedBy := testUserID
 	changes := map[string]interface{}{
 		"tags": []string{"new-tag"},
 	}
@@ -94,7 +102,7 @@ func TestNewImageDeletedEvent(t *testing.T) {
 	testTime := time.Now()
 	image := &Image{
 		ID:               1,
-		Filename:         "test.jpg",
+		Filename:         testFilename,
 		OriginalFilename: "original_test.jpg",
 		ContentType:      "image/jpeg",
 		FileSize:         1024,
@@ -102,13 +110,13 @@ func TestNewImageDeletedEvent(t *testing.T) {
 		Width:            intPtr(800),
 		Height:           intPtr(600),
 		Tags: []Tag{
-			{Name: "nature"},
+			{Name: testTagNature},
 		},
 		UploadedAt: testTime,
 		CreatedAt:  testTime,
 	}
 
-	deletedBy := "user123"
+	deletedBy := testUserID
 	reason := "User requested deletion"
 	event := NewImageDeletedEvent(image, deletedBy, reason)
 
@@ -124,13 +132,13 @@ func TestNewImageDeletedEvent(t *testing.T) {
 	assert.Equal(t, image.OriginalFilename, event.ImageData["original_filename"])
 	assert.Equal(t, image.ContentType, event.ImageData["content_type"])
 	assert.Equal(t, image.FileSize, event.ImageData["file_size"])
-	assert.Equal(t, []string{"nature"}, event.ImageData["tags"])
+	assert.Equal(t, []string{testTagNature}, event.ImageData["tags"])
 }
 
 func TestNewImageViewedEvent(t *testing.T) {
 	imageID := 1
-	userID := "user123"
-	ipAddress := "192.168.1.1"
+	userID := testUserID
+	ipAddress := testIPAddress
 	userAgent := "Mozilla/5.0"
 	referrer := "https://example.com"
 
@@ -146,9 +154,9 @@ func TestNewImageViewedEvent(t *testing.T) {
 
 func TestNewImageDownloadedEvent(t *testing.T) {
 	imageID := 1
-	filename := "test.jpg"
-	userID := "user123"
-	ipAddress := "192.168.1.1"
+	filename := testFilename
+	userID := testUserID
+	ipAddress := testIPAddress
 	downloadSize := int64(1024)
 
 	event := NewImageDownloadedEvent(imageID, filename, userID, ipAddress, downloadSize)
@@ -164,10 +172,10 @@ func TestNewImageDownloadedEvent(t *testing.T) {
 func TestNewTagCreatedEvent(t *testing.T) {
 	tag := &Tag{
 		ID:        1,
-		Name:      "nature",
+		Name:      testTagNature,
 		CreatedAt: time.Now(),
 	}
-	createdBy := "user123"
+	createdBy := testUserID
 
 	event := NewTagCreatedEvent(tag, createdBy)
 
@@ -180,9 +188,9 @@ func TestNewTagCreatedEvent(t *testing.T) {
 func TestNewTagDeletedEvent(t *testing.T) {
 	tag := &Tag{
 		ID:   1,
-		Name: "nature",
+		Name: testTagNature,
 	}
-	deletedBy := "user123"
+	deletedBy := testUserID
 	reason := "Unused tag"
 	imageCount := 5
 
@@ -199,8 +207,8 @@ func TestNewTagDeletedEvent(t *testing.T) {
 func TestNewTagAttachedEvent(t *testing.T) {
 	imageID := 1
 	tagID := 2
-	tagName := "nature"
-	attachedBy := "user123"
+	tagName := testTagNature
+	attachedBy := testUserID
 
 	event := NewTagAttachedEvent(imageID, tagID, tagName, attachedBy)
 
@@ -214,8 +222,8 @@ func TestNewTagAttachedEvent(t *testing.T) {
 func TestNewTagDetachedEvent(t *testing.T) {
 	imageID := 1
 	tagID := 2
-	tagName := "nature"
-	detachedBy := "user123"
+	tagName := testTagNature
+	detachedBy := testUserID
 
 	event := NewTagDetachedEvent(imageID, tagID, tagName, detachedBy)
 
@@ -227,9 +235,9 @@ func TestNewTagDetachedEvent(t *testing.T) {
 }
 
 func TestNewStorageQuotaReachedEvent(t *testing.T) {
-	userID := "user123"
-	currentUsage := int64(900 * 1024 * 1024)  // 900MB
-	quotaLimit := int64(1024 * 1024 * 1024)   // 1GB
+	userID := testUserID
+	currentUsage := int64(900 * 1024 * 1024) // 900MB
+	quotaLimit := int64(1024 * 1024 * 1024)  // 1GB
 
 	event := NewStorageQuotaReachedEvent(userID, currentUsage, quotaLimit)
 
@@ -242,7 +250,7 @@ func TestNewStorageQuotaReachedEvent(t *testing.T) {
 
 func TestNewImageProcessingFailedEvent(t *testing.T) {
 	imageID := 1
-	filename := "test.jpg"
+	filename := testFilename
 	processType := "thumbnail"
 	errorMsg := "Failed to generate thumbnail"
 	context := map[string]interface{}{
@@ -282,9 +290,9 @@ func TestNewThumbnailGeneratedEvent(t *testing.T) {
 func TestNewDomainEvent(t *testing.T) {
 	eventType := EventImageCreated
 	aggregateID := "image_1"
-	userID := "user123"
+	userID := testUserID
 	data := map[string]interface{}{
-		"filename": "test.jpg",
+		"filename": testFilename,
 		"size":     1024,
 	}
 
@@ -301,8 +309,8 @@ func TestNewDomainEvent(t *testing.T) {
 }
 
 func TestDomainEvent_AddMetadata(t *testing.T) {
-	event := NewDomainEvent(EventImageCreated, "image_1", "user123", nil)
-	
+	event := NewDomainEvent(EventImageCreated, "image_1", testUserID, nil)
+
 	event.AddMetadata("source", "web")
 	event.AddMetadata("client_version", "1.0.0")
 
@@ -311,8 +319,8 @@ func TestDomainEvent_AddMetadata(t *testing.T) {
 }
 
 func TestDomainEvent_ToJSON_FromJSON(t *testing.T) {
-	originalEvent := NewDomainEvent(EventImageCreated, "image_1", "user123", map[string]interface{}{
-		"filename": "test.jpg",
+	originalEvent := NewDomainEvent(EventImageCreated, "image_1", testUserID, map[string]interface{}{
+		"filename": testFilename,
 	})
 	originalEvent.AddMetadata("source", "web")
 
@@ -410,7 +418,7 @@ func TestDomainEvent_GetAge(t *testing.T) {
 
 func TestEventStream_NewEventStream(t *testing.T) {
 	stream := NewEventStream()
-	
+
 	assert.NotNil(t, stream)
 	assert.Empty(t, stream.Events)
 	assert.Equal(t, 0, stream.Total)
@@ -420,7 +428,7 @@ func TestEventStream_NewEventStream(t *testing.T) {
 
 func TestEventStream_AddEvent(t *testing.T) {
 	stream := NewEventStream()
-	
+
 	// Add first event
 	event1 := DomainEvent{
 		ID:          "1",
@@ -452,7 +460,7 @@ func TestEventStream_AddEvent(t *testing.T) {
 
 func TestEventStream_FilterByType(t *testing.T) {
 	stream := NewEventStream()
-	
+
 	events := []DomainEvent{
 		{Type: EventImageCreated, AggregateID: "image_1"},
 		{Type: EventImageUpdated, AggregateID: "image_1"},
@@ -479,7 +487,7 @@ func TestEventStream_FilterByType(t *testing.T) {
 
 func TestEventStream_FilterByAggregateID(t *testing.T) {
 	stream := NewEventStream()
-	
+
 	events := []DomainEvent{
 		{Type: EventImageCreated, AggregateID: "image_1"},
 		{Type: EventImageUpdated, AggregateID: "image_1"},
@@ -506,7 +514,7 @@ func TestEventStream_FilterByAggregateID(t *testing.T) {
 
 func TestEventStream_FilterByTimeRange(t *testing.T) {
 	stream := NewEventStream()
-	
+
 	now := time.Now()
 	events := []DomainEvent{
 		{Type: EventImageCreated, Timestamp: now.Add(-3 * time.Hour)},
@@ -554,23 +562,23 @@ func TestEventTypes(t *testing.T) {
 func BenchmarkNewImageCreatedEvent(b *testing.B) {
 	image := &Image{
 		ID:               1,
-		Filename:         "test.jpg",
-		OriginalFilename: "test.jpg",
+		Filename:         testFilename,
+		OriginalFilename: testFilename,
 		ContentType:      "image/jpeg",
 		FileSize:         1024,
 		StoragePath:      "/storage/test.jpg",
-		Tags:             []Tag{{Name: "nature"}},
+		Tags:             []Tag{{Name: testTagNature}},
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = NewImageCreatedEvent(image, "user123")
+		_ = NewImageCreatedEvent(image, testUserID)
 	}
 }
 
 func BenchmarkDomainEvent_ToJSON(b *testing.B) {
-	event := NewDomainEvent(EventImageCreated, "image_1", "user123", map[string]interface{}{
-		"filename": "test.jpg",
+	event := NewDomainEvent(EventImageCreated, "image_1", testUserID, map[string]interface{}{
+		"filename": testFilename,
 		"size":     1024,
 	})
 
@@ -582,7 +590,7 @@ func BenchmarkDomainEvent_ToJSON(b *testing.B) {
 
 func BenchmarkEventStream_FilterByType(b *testing.B) {
 	stream := NewEventStream()
-	
+
 	// Add many events
 	for i := 0; i < 1000; i++ {
 		event := DomainEvent{

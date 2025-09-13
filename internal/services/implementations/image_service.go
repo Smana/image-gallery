@@ -10,13 +10,13 @@ import (
 
 // ImageServiceImpl implements the image.ImageService interface
 type ImageServiceImpl struct {
-	imageRepo    image.Repository
-	tagRepo      image.TagRepository
-	storage      image.StorageService
-	processor    image.ImageProcessor
-	validator    image.ValidationService
-	eventPub     image.EventPublisher // can be nil
-	cache        image.CacheService   // can be nil
+	imageRepo image.Repository
+	tagRepo   image.TagRepository
+	storage   image.StorageService
+	processor image.ImageProcessor
+	validator image.ValidationService
+	eventPub  image.EventPublisher // can be nil
+	cache     image.CacheService   // can be nil
 }
 
 // NewImageService creates a new image service implementation
@@ -60,22 +60,23 @@ func (s *ImageServiceImpl) GetImage(ctx context.Context, id int) (*image.Image, 
 		}
 		// If cache miss or error, continue to database
 	}
-	
+
 	// Get from database
 	img, err := s.imageRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Cache the result for future requests
 	if s.cache != nil {
 		// Cache for 1 hour (3600 seconds)
 		if cacheErr := s.cache.SetImage(ctx, img, 3600); cacheErr != nil {
-			// Log cache error but don't fail the request
-			// In a real app, you might want to use a proper logger
+			// Cache errors are intentionally ignored to avoid impacting user requests
+			// In production, this would be logged for monitoring purposes
+			_ = cacheErr // explicitly ignore
 		}
 	}
-	
+
 	return img, nil
 }
 
@@ -83,7 +84,7 @@ func (s *ImageServiceImpl) GetImage(ctx context.Context, id int) (*image.Image, 
 func (s *ImageServiceImpl) ListImages(ctx context.Context, req *image.ListImagesRequest) (*image.ListImagesResponse, error) {
 	// Generate cache key based on request parameters
 	cacheKey := generateListCacheKey(req)
-	
+
 	// Try to get from cache first
 	if s.cache != nil {
 		if cachedResponse, err := s.cache.GetImageList(ctx, cacheKey); err == nil {
@@ -91,21 +92,23 @@ func (s *ImageServiceImpl) ListImages(ctx context.Context, req *image.ListImages
 		}
 		// If cache miss or error, continue to database
 	}
-	
+
 	// Get from database
 	response, err := s.imageRepo.List(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Cache the result for future requests
 	if s.cache != nil {
 		// Cache for 30 minutes (1800 seconds) - lists change more frequently
 		if cacheErr := s.cache.SetImageList(ctx, cacheKey, response, 1800); cacheErr != nil {
-			// Log cache error but don't fail the request
+			// Cache errors are intentionally ignored to avoid impacting user requests
+			// In production, this would be logged for monitoring purposes
+			_ = cacheErr // explicitly ignore
 		}
 	}
-	
+
 	return response, nil
 }
 
@@ -114,8 +117,8 @@ func generateListCacheKey(req *image.ListImagesRequest) string {
 	if req == nil {
 		return "list_default"
 	}
-	
-	return fmt.Sprintf("list_page_%d_pagesize_%d_tag_%s", 
+
+	return fmt.Sprintf("list_page_%d_pagesize_%d_tag_%s",
 		req.Page, req.PageSize, req.Tag)
 }
 
@@ -133,20 +136,22 @@ func (s *ImageServiceImpl) DeleteImage(ctx context.Context, id int) error {
 	// 3. Remove from database
 	// 4. Invalidate cache
 	// 5. Publish events
-	
+
 	// For now, just invalidate the cache
 	if s.cache != nil {
 		// Remove the specific image from cache
 		if err := s.cache.DeleteImage(ctx, id); err != nil {
-			// Log error but don't fail deletion
+			// Cache errors are intentionally ignored to avoid impacting user requests
+			_ = err // explicitly ignore
 		}
-		
+
 		// Invalidate all image lists since they might contain this image
 		if err := s.cache.InvalidateImageLists(ctx); err != nil {
-			// Log error but don't fail deletion
+			// Cache errors are intentionally ignored to avoid impacting user requests
+			_ = err // explicitly ignore
 		}
 	}
-	
+
 	return nil
 }
 

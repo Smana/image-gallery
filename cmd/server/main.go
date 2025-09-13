@@ -34,7 +34,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	if err := database.RunMigrations(db); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
@@ -50,7 +50,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize services container: %v", err)
 	}
-	defer container.Close()
+	defer func() { _ = container.Close() }()
 
 	handler := handlers.NewWithContainer(container)
 

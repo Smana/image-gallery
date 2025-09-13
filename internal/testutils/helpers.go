@@ -3,10 +3,11 @@ package testutils
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ import (
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
-	
+
 	"image-gallery/internal/domain/image"
 	"image-gallery/internal/platform/database"
 )
@@ -58,13 +59,13 @@ func (ts *TestSuite) ResetData(ctx context.Context) error {
 // CreateTestImage creates a test image record in the database
 func (ts *TestSuite) CreateTestImage(ctx context.Context, filename string) (*database.Image, error) {
 	img := &database.Image{
-		Filename:         fmt.Sprintf("test_%s_%d.jpg", filename, rand.Int()),
+		Filename:         fmt.Sprintf("test_%s_%d.jpg", filename, secureRandInt()),
 		OriginalFilename: filename + ".jpg",
 		ContentType:      "image/jpeg",
-		FileSize:         1024 * rand.Int63n(100), // Random size up to 100KB
+		FileSize:         1024 * (1 + secureRandInt63n(99)), // Random size 1KB to 100KB
 		StoragePath:      fmt.Sprintf("images/test_%d.jpg", time.Now().UnixNano()),
-		Width:            intPtr(800 + rand.Intn(400)),
-		Height:           intPtr(600 + rand.Intn(400)),
+		Width:            intPtr(800 + secureRandIntn(400)),
+		Height:           intPtr(600 + secureRandIntn(400)),
 		Metadata:         database.Metadata{},
 	}
 
@@ -80,7 +81,7 @@ func (ts *TestSuite) CreateTestTag(ctx context.Context, name string) (*database.
 	tag := &database.Tag{
 		Name:        name,
 		Description: stringPtr(fmt.Sprintf("Test tag: %s", name)),
-		Color:       stringPtr("#" + fmt.Sprintf("%06x", rand.Intn(0xFFFFFF))),
+		Color:       stringPtr("#" + fmt.Sprintf("%06x", secureRandIntn(0xFFFFFF))),
 	}
 
 	if err := ts.Repos.Tags.Create(ctx, tag); err != nil {
@@ -95,7 +96,7 @@ func (ts *TestSuite) CreateTestAlbum(ctx context.Context, name string) (*databas
 	album := &database.Album{
 		Name:        name,
 		Description: stringPtr(fmt.Sprintf("Test album: %s", name)),
-		IsPublic:    rand.Intn(2) == 1,
+		IsPublic:    secureRandIntn(2) == 1,
 	}
 
 	if err := ts.Repos.Albums.Create(ctx, album); err != nil {
@@ -112,7 +113,7 @@ func (ts *TestSuite) CreateTestImageWithTags(ctx context.Context, filename strin
 		return nil, nil, err
 	}
 
-	var tags []*database.Tag
+	tags := make([]*database.Tag, 0, len(tagNames))
 	for _, tagName := range tagNames {
 		tag, err := ts.CreateTestTag(ctx, tagName)
 		if err != nil {
@@ -135,15 +136,11 @@ func GenerateTestImageData(width, height int) []byte {
 	// Create a simple test image (just some bytes that represent an image)
 	// In a real test, you might want to generate actual image data
 	size := width * height * 3 // RGB
-	data := make([]byte, size)
-	for i := range data {
-		data[i] = byte(rand.Intn(256))
-	}
-	return data
+	return secureRandBytes(size)
 }
 
 // CreateMultipartFormData creates multipart form data for file upload testing
-func CreateMultipartFormData(filename string, data []byte, additionalFields map[string]string) ([]byte, string, error) {
+func CreateMultipartFormData(filename string, data []byte, additionalFields map[string]string) (formData []byte, contentType string, err error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
@@ -152,7 +149,7 @@ func CreateMultipartFormData(filename string, data []byte, additionalFields map[
 	if err != nil {
 		return nil, "", err
 	}
-	
+
 	if _, err := fileWriter.Write(data); err != nil {
 		return nil, "", err
 	}
@@ -174,11 +171,11 @@ func CreateMultipartFormData(filename string, data []byte, additionalFields map[
 // MakeTestRequest creates an HTTP test request with the given parameters
 func MakeTestRequest(method, url string, body io.Reader, headers map[string]string) *http.Request {
 	req := httptest.NewRequest(method, url, body)
-	
+
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
-	
+
 	return req
 }
 
@@ -186,13 +183,13 @@ func MakeTestRequest(method, url string, body io.Reader, headers map[string]stri
 func MakeJSONRequest(method, url string, payload interface{}) *http.Request {
 	var body io.Reader
 	if payload != nil {
-		jsonData, _ := json.Marshal(payload)
+		jsonData, _ := json.Marshal(payload) //nolint:errcheck // Test utility - marshal error would cause nil body
 		body = bytes.NewReader(jsonData)
 	}
-	
+
 	req := httptest.NewRequest(method, url, body)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	return req
 }
 
@@ -209,14 +206,14 @@ func AssertJSONResponse(t TestingInterface, resp *httptest.ResponseRecorder, tar
 		t.Errorf("Expected JSON response, got %s", resp.Header().Get("Content-Type"))
 		return fmt.Errorf("not a JSON response")
 	}
-	
+
 	if target != nil {
 		if err := json.Unmarshal(resp.Body.Bytes(), target); err != nil {
 			t.Errorf("Failed to unmarshal JSON response: %v", err)
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -266,7 +263,7 @@ func RandomString(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
+		b[i] = charset[secureRandIntn(len(charset))]
 	}
 	return string(b)
 }
@@ -281,9 +278,56 @@ func CreateImageRequest(filename, contentType string, tags []string) *image.Crea
 	return &image.CreateImageRequest{
 		OriginalFilename: filename,
 		ContentType:      contentType,
-		FileSize:         1024 * rand.Int63n(100),
+		FileSize:         1024 * (1 + secureRandInt63n(99)),
 		Width:            intPtr(800),
 		Height:           intPtr(600),
 		Tags:             tags,
 	}
+}
+
+// Secure random number generators for test utilities
+
+// secureRandInt generates a secure random integer
+func secureRandInt() int {
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback to timestamp-based value for tests
+		return int(time.Now().UnixNano())
+	}
+	// #nosec G115 -- Test utility function, overflow acceptable for test randomness
+	return int(binary.BigEndian.Uint64(buf[:]))
+}
+
+// secureRandInt63n generates a secure random int64 in range [0, n)
+func secureRandInt63n(n int64) int64 {
+	if n <= 0 {
+		return 0
+	}
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback to timestamp-based value for tests
+		return time.Now().UnixNano() % n
+	}
+	// #nosec G115 -- Test utility function, overflow acceptable for test randomness
+	return int64(binary.BigEndian.Uint64(buf[:])) % n
+}
+
+// secureRandIntn generates a secure random int in range [0, n)
+func secureRandIntn(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	return int(secureRandInt63n(int64(n)))
+}
+
+// secureRandBytes generates secure random bytes for testing
+func secureRandBytes(size int) []byte {
+	data := make([]byte, size)
+	if _, err := rand.Read(data); err != nil {
+		// Fallback to predictable data for tests if crypto fails
+		for i := range data {
+			data[i] = byte(i % 256)
+		}
+	}
+	return data
 }

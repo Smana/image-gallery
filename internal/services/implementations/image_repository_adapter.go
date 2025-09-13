@@ -69,7 +69,7 @@ func (a *ImageRepositoryAdapter) List(ctx context.Context, req *image.ListImages
 			Limit:  req.PageSize,
 			Offset: req.GetOffset(),
 		}
-		
+
 		tags := []string{req.Tag}
 		dbImages, err := a.dbRepo.GetByTags(ctx, tags, false, pagination)
 		if err != nil {
@@ -103,7 +103,7 @@ func (a *ImageRepositoryAdapter) List(ctx context.Context, req *image.ListImages
 		Limit:  req.PageSize,
 		Offset: req.GetOffset(),
 	}
-	
+
 	sort := database.SortParams{
 		Field: "created_at",
 		Order: "DESC",
@@ -196,13 +196,13 @@ func (a *ImageRepositoryAdapter) CountByTag(ctx context.Context, tagName string)
 		Limit:  1000, // Reasonable limit for counting
 		Offset: 0,
 	}
-	
+
 	tags := []string{tagName}
 	dbImages, err := a.dbRepo.GetByTags(ctx, tags, false, pagination)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return len(dbImages), nil
 }
 

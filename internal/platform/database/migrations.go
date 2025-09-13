@@ -36,7 +36,7 @@ func (m *MigrationManager) EnsureMigrationsTable() error {
 		description VARCHAR(255),
 		applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 	);`
-	
+
 	_, err := m.db.Exec(query)
 	return err
 }
@@ -47,7 +47,7 @@ func (m *MigrationManager) GetAppliedMigrations() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
 
 	var versions []string
 	for rows.Next() {
@@ -57,7 +57,7 @@ func (m *MigrationManager) GetAppliedMigrations() ([]string, error) {
 		}
 		versions = append(versions, version)
 	}
-	
+
 	return versions, rows.Err()
 }
 
@@ -67,7 +67,7 @@ func (m *MigrationManager) ApplyMigration(migration Migration) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() //nolint:errcheck // Transaction cleanup
 
 	// Apply the migration SQL
 	if _, err := tx.Exec(migration.SQL); err != nil {
@@ -141,41 +141,24 @@ func LoadMigrationsFromFS(fsys fs.FS, dir string) ([]Migration, error) {
 func LoadMigrationsFromDirectory(dir string) ([]Migration, error) {
 	var migrations []Migration
 
-	// Check if directory exists
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("migrations directory does not exist: %s", dir)
+	cleanedDir, err := validateMigrationsDirectory(dir)
+	if err != nil {
+		return nil, err
 	}
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if info.IsDir() || !strings.HasSuffix(path, ".sql") {
-			return nil
-		}
-
-		content, err := os.ReadFile(path)
+		migration, shouldProcess, err := processMigrationFile(path, info, cleanedDir)
 		if err != nil {
-			return fmt.Errorf("failed to read migration file %s: %w", path, err)
+			return err
 		}
 
-		// Extract version and description from filename
-		filename := filepath.Base(path)
-		parts := strings.SplitN(filename, "_", 2)
-		if len(parts) < 2 {
-			return fmt.Errorf("invalid migration filename format: %s", filename)
+		if shouldProcess {
+			migrations = append(migrations, migration)
 		}
-
-		version := parts[0]
-		description := strings.TrimSuffix(parts[1], ".sql")
-		description = strings.ReplaceAll(description, "_", " ")
-
-		migrations = append(migrations, Migration{
-			Version:     version,
-			Description: description,
-			SQL:         string(content),
-		})
 
 		return nil
 	})
@@ -192,6 +175,65 @@ func LoadMigrationsFromDirectory(dir string) ([]Migration, error) {
 	return migrations, nil
 }
 
+// validateMigrationsDirectory validates the directory and returns the cleaned path
+func validateMigrationsDirectory(dir string) (string, error) {
+	// Check if directory exists
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return "", fmt.Errorf("migrations directory does not exist: %s", dir)
+	}
+
+	// Clean the base directory path for security validation
+	cleanedDir, err := filepath.Abs(filepath.Clean(dir))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve directory path: %w", err)
+	}
+
+	return cleanedDir, nil
+}
+
+// processMigrationFile processes a single migration file and returns the migration
+func processMigrationFile(path string, info os.FileInfo, cleanedDir string) (Migration, bool, error) {
+	if info.IsDir() || !strings.HasSuffix(path, ".sql") {
+		return Migration{}, false, nil
+	}
+
+	// Security: Validate that the file is within the expected directory
+	cleanedPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return Migration{}, false, fmt.Errorf("failed to resolve file path: %w", err)
+	}
+
+	if !strings.HasPrefix(cleanedPath, cleanedDir) {
+		return Migration{}, false, fmt.Errorf("file path is outside expected directory: %s", path)
+	}
+
+	// nosemgrep: go.lang.security.audit.file-inclusion.file-inclusion
+	// #nosec G304 -- Path is validated to be within expected directory
+	content, err := os.ReadFile(cleanedPath)
+	if err != nil {
+		return Migration{}, false, fmt.Errorf("failed to read migration file %s: %w", path, err)
+	}
+
+	// Extract version and description from filename
+	filename := filepath.Base(path)
+	parts := strings.SplitN(filename, "_", 2)
+	if len(parts) < 2 {
+		return Migration{}, false, fmt.Errorf("invalid migration filename format: %s", filename)
+	}
+
+	version := parts[0]
+	description := strings.TrimSuffix(parts[1], ".sql")
+	description = strings.ReplaceAll(description, "_", " ")
+
+	migration := Migration{
+		Version:     version,
+		Description: description,
+		SQL:         string(content),
+	}
+
+	return migration, true, nil
+}
+
 // RunMigrations applies all pending migrations
 func RunMigrations(db *sql.DB) error {
 	manager := NewMigrationManager(db)
@@ -203,7 +245,7 @@ func RunMigrations(db *sql.DB) error {
 
 	// Try to load migrations from filesystem first, fallback to embedded
 	var migrations []Migration
-	
+
 	// Try to load from migrations directory
 	if migrationFiles, err := LoadMigrationsFromDirectory("internal/platform/database/migrations"); err == nil && len(migrationFiles) > 0 {
 		migrations = migrationFiles
@@ -241,9 +283,8 @@ func RunMigrations(db *sql.DB) error {
 	return nil
 }
 
-// getInitialSchemaMigration returns the initial schema migration SQL
-func getInitialSchemaMigration() string {
-	return `
+// Individual migration components (for testing)
+const createImagesTable = `
 -- Create images table for storing image metadata
 CREATE TABLE IF NOT EXISTS images (
     id SERIAL PRIMARY KEY,
@@ -268,7 +309,9 @@ CREATE INDEX IF NOT EXISTS idx_images_content_type ON images(content_type);
 CREATE INDEX IF NOT EXISTS idx_images_uploaded_at ON images(uploaded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_images_file_size ON images(file_size DESC);
 CREATE INDEX IF NOT EXISTS idx_images_storage_path ON images(storage_path);
+`
 
+const createTagsTable = `
 -- Create tags table for image categorization
 CREATE TABLE IF NOT EXISTS tags (
     id SERIAL PRIMARY KEY,
@@ -293,6 +336,11 @@ CREATE TABLE IF NOT EXISTS image_tags (
 -- Create indexes for efficient tag queries
 CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id);
 CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id);
+`
+
+// getInitialSchemaMigration returns the initial schema migration SQL
+func getInitialSchemaMigration() string {
+	return createImagesTable + "\n" + createTagsTable + `
 
 -- Create albums/collections table
 CREATE TABLE IF NOT EXISTS albums (

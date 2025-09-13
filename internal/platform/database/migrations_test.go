@@ -18,7 +18,7 @@ func TestRunMigrations(t *testing.T) {
 
 	db, err := NewConnection(testDBURL)
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	// Clean up any existing tables
 	cleanupTables(t, db)
@@ -42,7 +42,7 @@ func TestRunMigrationsIdempotent(t *testing.T) {
 
 	db, err := NewConnection(testDBURL)
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	// Clean up any existing tables
 	cleanupTables(t, db)
@@ -64,7 +64,7 @@ func TestRunMigrationsWithInvalidDatabase(t *testing.T) {
 
 	db, err := NewConnection(testDBURL)
 	require.NoError(t, err)
-	db.Close() // Close immediately to make it invalid
+	_ = db.Close() //nolint:errcheck // Connection cleanup for invalid DB test
 
 	// Should fail when trying to run migrations on closed connection
 	err = RunMigrations(db)
@@ -95,7 +95,7 @@ func TestImagesTableSchema(t *testing.T) {
 
 	db, err := NewConnection(testDBURL)
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	cleanupTables(t, db)
 	err = RunMigrations(db)
@@ -135,7 +135,7 @@ func TestTagsAndImageTagsSchema(t *testing.T) {
 
 	db, err := NewConnection(testDBURL)
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Resource cleanup
 
 	cleanupTables(t, db)
 	err = RunMigrations(db)
@@ -200,7 +200,7 @@ func verifyImagesTable(t *testing.T, db *sql.DB) {
 
 	rows, err := db.Query(query)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	expectedColumns := []string{
 		"id", "filename", "original_filename", "content_type", "file_size",
@@ -262,7 +262,7 @@ func verifyIndexes(t *testing.T, db *sql.DB) {
 
 	rows, err := db.Query(query)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var indexes []string
 	for rows.Next() {

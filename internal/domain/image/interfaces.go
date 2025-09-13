@@ -182,21 +182,21 @@ type TagService interface {
 
 // ImageStats represents statistics about images in the system
 type ImageStats struct {
-	TotalImages     int64
-	TotalSize       int64
-	AverageSize     int64
-	MostUsedTags    []string
-	ContentTypes    map[string]int64
-	SizeCategories  map[string]int64
-	ImagesPerMonth  map[string]int64
+	TotalImages    int64
+	TotalSize      int64
+	AverageSize    int64
+	MostUsedTags   []string
+	ContentTypes   map[string]int64
+	SizeCategories map[string]int64
+	ImagesPerMonth map[string]int64
 }
 
 // TagStats represents statistics about tags in the system
 type TagStats struct {
-	TotalTags         int64
+	TotalTags           int64
 	AverageTagsPerImage float64
-	MostUsedTags      []*TagUsage
-	UnusedTags        []*Tag
+	MostUsedTags        []*TagUsage
+	UnusedTags          []*Tag
 }
 
 // TagUsage represents usage statistics for a tag
@@ -210,7 +210,7 @@ type ValidationService interface {
 	// ValidateImageUpload validates an image upload request
 	ValidateImageUpload(ctx context.Context, req *CreateImageRequest) error
 
-	// ValidateImageUpdate validates an image update request  
+	// ValidateImageUpdate validates an image update request
 	ValidateImageUpdate(ctx context.Context, id int, req *UpdateImageRequest) error
 
 	// ValidateImageDeletion validates if an image can be deleted

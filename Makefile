@@ -1,4 +1,4 @@
-.PHONY: build test clean run dev docker-build docker-up docker-down fmt lint vet dagger-lint dagger-test dagger-build dagger-vulncheck dagger-docker dagger-trivy dagger-trivy-fs
+.PHONY: build test clean run dev docker-build docker-up docker-down fmt lint vet test-ci build-ci vulncheck trivy docker-ci ci release
 
 # Build the application
 build:
@@ -42,12 +42,16 @@ fmt:
 	@echo "Formatting code..."
 	go fmt ./...
 
-# Lint code
+# Lint code (using Dagger for consistency with CI)
 lint:
-	@if command -v golangci-lint > /dev/null; then \
-		golangci-lint run; \
+	@echo "Running linting with Dagger (matches CI environment)..."
+	@if command -v dagger > /dev/null; then \
+		dagger call -m github.com/sagikazarmark/daggerverse/go@v0.9.0 exec \
+			--src=. \
+			--args=go,run,github.com/golangci/golangci-lint/cmd/golangci-lint@latest,run; \
 	else \
-		echo "golangci-lint not installed. Install it with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
+		echo "Dagger not installed. Run 'make install-tools' first"; \
+		exit 1; \
 	fi
 
 # Vet code
@@ -89,53 +93,40 @@ install-tools:
 	fi
 
 # Dagger-based CI/CD commands (using existing modules)
-dagger-lint:
-	@echo "Running linting with Dagger..."
-	@if command -v dagger > /dev/null; then \
-		dagger -m github.com/sagikazarmark/daggerverse/golangci-lint@v0.4.0 call \
-			--source=. lint --verbose; \
-	else \
-		echo "Dagger not installed. Run 'make install-tools' first"; \
-	fi
 
-dagger-test:
+test-ci:
 	@echo "Running tests with Dagger..."
 	@if command -v dagger > /dev/null; then \
-		dagger -m github.com/sagikazarmark/daggerverse/go@v0.9.0 call \
-			--source=. \
-			--version=1.25 \
-			exec --args="test,./...,--coverprofile=coverage.out,--race"; \
+		dagger call -m github.com/sagikazarmark/daggerverse/go@v0.9.0 exec \
+			--src=. \
+			--args=go,test,./...,--coverprofile=coverage.out,--race,--short; \
 	else \
 		echo "Dagger not installed. Run 'make install-tools' first"; \
 	fi
 
-dagger-vulncheck:
+vulncheck:
 	@echo "Running vulnerability scan with Dagger..."
 	@if command -v dagger > /dev/null; then \
-		dagger -m github.com/disaster37/dagger-library-go/golang@v0.0.24 call \
-			--src=. vulncheck; \
+		dagger call -m github.com/sagikazarmark/daggerverse/go@v0.9.0 exec \
+			--src=. \
+			--args=go,run,golang.org/x/vuln/cmd/govulncheck@latest,./...; \
 	else \
 		echo "Dagger not installed. Run 'make install-tools' first"; \
+		exit 1; \
 	fi
 
-dagger-build:
+build-ci:
 	@echo "Building application with Dagger..."
 	@if command -v dagger > /dev/null; then \
-		dagger -m github.com/sagikazarmark/daggerverse/go@v0.9.0 call \
-			--source=. \
-			--version=1.25 \
-			with-platform linux/amd64 \
-			with-cgo-disabled \
-			build \
-			--package=./cmd/server \
-			--ldflags="-w -s" \
-			--output=server \
-			export --path=./bin/; \
+		dagger call -m github.com/sagikazarmark/daggerverse/go@v0.9.0 exec \
+			--src=. \
+			--args=go,build,-ldflags,"-w -s",-o,./bin/server,./cmd/server; \
 	else \
 		echo "Dagger not installed. Run 'make install-tools' first"; \
+		exit 1; \
 	fi
 
-dagger-docker:
+docker-ci:
 	@echo "Building Docker image with Dagger..."
 	@if command -v dagger > /dev/null; then \
 		dagger -m github.com/sagikazarmark/daggerverse/go@v0.9.0 call \
@@ -156,40 +147,117 @@ dagger-docker:
 		echo "Dagger not installed. Run 'make install-tools' first"; \
 	fi
 
-dagger-trivy-fs:
-	@echo "Running filesystem security scan with Trivy and Dagger..."
-	@if command -v dagger > /dev/null; then \
-		dagger -m github.com/purpleclay/daggerverse/trivy@v0.11.0 call \
-			filesystem --path=. \
-			--severity=HIGH,CRITICAL \
-			--format=table; \
-	else \
-		echo "Dagger not installed. Run 'make install-tools' first"; \
-	fi
 
-dagger-trivy:
+trivy:
 	@echo "Running container image security scan with Trivy and Dagger..."
 	@if command -v dagger > /dev/null; then \
 		echo "Building image first..."; \
-		make dagger-docker > /dev/null 2>&1; \
+		make docker-ci > /dev/null 2>&1; \
 		echo "Scanning image-gallery:latest..."; \
-		dagger -m github.com/purpleclay/daggerverse/trivy@v0.11.0 call \
-			image \
-			--ref=image-gallery:latest \
+		dagger -m github.com/jpadams/daggerverse/trivy@v0.6.0 call \
+			scan-image \
+			--image-ref=image-gallery:latest \
 			--severity=HIGH,CRITICAL \
 			--format=table; \
 	else \
 		echo "Dagger not installed. Run 'make install-tools' first"; \
 	fi
 
-# Run complete Dagger CI pipeline locally
-dagger-ci:
+# Run complete CI pipeline locally
+ci:
 	@echo "Running complete CI pipeline with Dagger..."
-	@make dagger-lint
-	@make dagger-test
-	@make dagger-vulncheck
-	@make dagger-trivy-fs
-	@make dagger-build
+	@make lint
+	@make test-ci
+	@make vulncheck
+	@make trivy
+	@make build-ci
+
+# Release command - prepare and validate for release
+release:
+	@echo "🚀 Preparing for release..."
+	@echo ""
+	@echo "This command will:"
+	@echo "  1. Run complete CI pipeline"
+	@echo "  2. Check conventional commit format"
+	@echo "  3. Validate release readiness"
+	@echo "  4. Guide you through creating a release"
+	@echo ""
+	@read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+	@echo ""
+	@echo "📋 Step 1: Running CI pipeline..."
+	@make ci
+	@echo ""
+	@echo "✅ CI pipeline completed successfully!"
+	@echo ""
+	@echo "📋 Step 2: Checking recent commits format..."
+	@if command -v git > /dev/null; then \
+		echo "Recent commits:"; \
+		git log --oneline -10 --pretty=format:"  %C(yellow)%h%C(reset) %s" | head -10; \
+		echo ""; \
+		echo ""; \
+		echo "📝 Conventional Commits format:"; \
+		echo "  feat: add new feature (minor version bump)"; \
+		echo "  fix: bug fix (patch version bump)"; \
+		echo "  feat!: breaking change (major version bump)"; \
+		echo "  docs: documentation changes"; \
+		echo "  ci: CI/CD changes"; \
+		echo "  refactor: code refactoring"; \
+		echo ""; \
+		echo "📋 Step 3: Checking git status..."; \
+		if [ -n "$$(git status --porcelain)" ]; then \
+			echo "❌ Working directory is not clean. Please commit or stash changes."; \
+			git status --short; \
+			exit 1; \
+		else \
+			echo "✅ Working directory is clean."; \
+		fi; \
+		echo ""; \
+		echo "📋 Step 4: Checking current branch..."; \
+		CURRENT_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+		if [ "$$CURRENT_BRANCH" != "main" ]; then \
+			echo "❌ Not on main branch (currently on $$CURRENT_BRANCH)."; \
+			echo "Please switch to main branch: git checkout main"; \
+			exit 1; \
+		else \
+			echo "✅ On main branch."; \
+		fi; \
+		echo ""; \
+		echo "📋 Step 5: Checking for unpushed commits..."; \
+		UNPUSHED=$$(git log origin/main..HEAD --oneline | wc -l); \
+		if [ $$UNPUSHED -gt 0 ]; then \
+			echo "❌ There are $$UNPUSHED unpushed commits."; \
+			echo "Please push your commits: git push origin main"; \
+			exit 1; \
+		else \
+			echo "✅ All commits are pushed."; \
+		fi; \
+	else \
+		echo "❌ Git not found. Please install git."; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "🎉 Release validation completed successfully!"
+	@echo ""
+	@echo "📋 Next steps to create a release:"
+	@echo ""
+	@echo "  1. Push any final commits to main branch:"
+	@echo "     git add . && git commit -m 'feat: your feature description'"
+	@echo "     git push origin main"
+	@echo ""
+	@echo "  2. The release-please action will automatically:"
+	@echo "     - Create a Release PR with changelog"
+	@echo "     - Update version numbers"
+	@echo "     - Generate release notes"
+	@echo ""
+	@echo "  3. Review and merge the Release PR when ready"
+	@echo ""
+	@echo "  4. After merging, a GitHub release will be created with:"
+	@echo "     - Multi-platform binaries"
+	@echo "     - Container images"
+	@echo "     - Security scan results"
+	@echo "     - Automated release notes"
+	@echo ""
+	@echo "📖 For more details, see: docs/DEVELOPMENT.md#release-process"
 
 # Atlas database schema management
 atlas-validate:
@@ -239,25 +307,23 @@ help:
 	@echo "Available commands:"
 	@echo ""
 	@echo "Build & Development:"
-	@echo "  build           - Build the application"
-	@echo "  test            - Run tests"
+	@echo "  build           - Build the application (local)"
+	@echo "  test            - Run tests (local, fast)"
 	@echo "  test-coverage   - Run tests with coverage report"
 	@echo "  clean           - Clean build artifacts"
 	@echo "  run             - Run the application locally"
 	@echo "  dev             - Run in development mode with hot reload"
 	@echo "  fmt             - Format code"
-	@echo "  lint            - Lint code"
+	@echo "  lint            - Lint code (matches CI exactly)"
 	@echo "  vet             - Vet code"
 	@echo ""
-	@echo "Dagger CI/CD (containerized):"
-	@echo "  dagger-lint     - Run linting with Dagger"
-	@echo "  dagger-test     - Run tests with Dagger"
-	@echo "  dagger-vulncheck - Run vulnerability scan with Dagger"
-	@echo "  dagger-trivy-fs - Run filesystem security scan with Trivy"
-	@echo "  dagger-trivy    - Run container image security scan with Trivy"
-	@echo "  dagger-build    - Build application with Dagger"
-	@echo "  dagger-docker   - Build Docker image with Dagger"
-	@echo "  dagger-ci       - Run complete CI pipeline with Dagger"
+	@echo "CI/CD (using Dagger for consistency):"
+	@echo "  ci              - Run complete CI pipeline (lint + test-ci + vulncheck + trivy + build-ci)"
+	@echo "  test-ci         - Run tests with Dagger (CI environment)"
+	@echo "  vulncheck       - Run vulnerability scan with Dagger"
+	@echo "  trivy           - Run container image security scan with Trivy"
+	@echo "  build-ci        - Build application with Dagger (CI environment)"
+	@echo "  docker-ci       - Build Docker image with Dagger (CI environment)"
 	@echo ""
 	@echo "Docker:"
 	@echo "  docker-build    - Build Docker image"
@@ -273,6 +339,9 @@ help:
 	@echo "  db-start        - Start database services only"
 	@echo "  db-stop         - Stop database services"
 	@echo "  db-reset        - Reset database with fresh schema"
+	@echo ""
+	@echo "Release:"
+	@echo "  release         - Prepare and validate for release (run tests, check commits)"
 	@echo ""
 	@echo "Tools:"
 	@echo "  install-tools   - Install development tools (including Dagger)"

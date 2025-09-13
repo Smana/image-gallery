@@ -21,26 +21,26 @@ type TestConfig struct {
 type Container struct {
 	config *config.Config
 	db     *sql.DB
-	
+
 	// Storage
-	storageClient *storage.MinIOClient
+	storageClient  *storage.MinIOClient
 	storageService image.StorageService
-	
+
 	// Repositories
 	imageRepository image.Repository
 	tagRepository   image.TagRepository
-	
+
 	// Services
 	imageService      image.ImageService
 	tagService        image.TagService
 	imageProcessor    image.ImageProcessor
 	validationService image.ValidationService
-	
+
 	// Infrastructure services (optional - can be nil for now)
 	eventPublisher      image.EventPublisher
-	cacheService       image.CacheService
-	searchService      image.SearchService
-	auditService       image.AuditService
+	cacheService        image.CacheService
+	searchService       image.SearchService
+	auditService        image.AuditService
 	notificationService image.NotificationService
 }
 
@@ -48,14 +48,14 @@ type Container struct {
 func NewContainer(cfg *config.Config, db *sql.DB, storageClient *storage.MinIOClient) (*Container, error) {
 	container := &Container{
 		config:        cfg,
-		db:           db,
+		db:            db,
 		storageClient: storageClient,
 	}
-	
+
 	if err := container.initializeServices(); err != nil {
 		return nil, err
 	}
-	
+
 	return container, nil
 }
 
@@ -69,7 +69,7 @@ func NewContainerForTest(testCfg *TestConfig, db *sql.DB, storageClient *storage
 			BucketName: "test-images",
 		},
 	}
-	
+
 	return NewContainer(cfg, db, storageClient)
 }
 
@@ -77,11 +77,11 @@ func NewContainerForTest(testCfg *TestConfig, db *sql.DB, storageClient *storage
 func (c *Container) initializeServices() error {
 	// Initialize database repositories first
 	dbImageRepo := database.NewImageRepository(c.db)
-	
+
 	// Initialize domain repository adapters
 	c.imageRepository = implementations.NewImageRepositoryAdapter(dbImageRepo)
 	c.tagRepository = implementations.NewTagRepository(c.db)
-	
+
 	// Initialize infrastructure services
 	// Try to create full storage service, fallback to MinIOClient wrapper
 	storageConfig := &c.config.Storage
@@ -92,7 +92,7 @@ func (c *Container) initializeServices() error {
 	}
 	c.imageProcessor = implementations.NewImageProcessor()
 	c.validationService = implementations.NewValidationService()
-	
+
 	// Initialize cache service (optional)
 	if c.config.Cache.Enabled {
 		if redisClient, err := cache.NewRedisClient(c.config.Cache); err == nil {
@@ -106,13 +106,13 @@ func (c *Container) initializeServices() error {
 		log.Println("Cache service disabled")
 		c.cacheService = nil
 	}
-	
+
 	// Initialize optional services (can be nil for now)
 	c.eventPublisher = nil      // Will implement later
-	c.searchService = nil       // Will implement later  
+	c.searchService = nil       // Will implement later
 	c.auditService = nil        // Will implement later
 	c.notificationService = nil // Will implement later
-	
+
 	// Initialize domain services
 	c.imageService = implementations.NewImageService(
 		c.imageRepository,
@@ -123,13 +123,13 @@ func (c *Container) initializeServices() error {
 		c.eventPublisher,
 		c.cacheService,
 	)
-	
+
 	c.tagService = implementations.NewTagService(
 		c.tagRepository,
 		c.validationService,
 		c.eventPublisher,
 	)
-	
+
 	log.Println("Dependency injection container initialized successfully")
 	return nil
 }

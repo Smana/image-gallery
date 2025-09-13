@@ -39,7 +39,7 @@ func TestNewRedisClient(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client, err := NewRedisClient(tt.config)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 				assert.Nil(t, client)
@@ -47,7 +47,7 @@ func TestNewRedisClient(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, client)
 				if client != nil {
-					client.Close()
+					_ = client.Close() //nolint:errcheck // Connection cleanup in test
 				}
 			}
 		})
@@ -61,7 +61,7 @@ func TestRedisClient_ImageOperations(t *testing.T) {
 		t.Skip("Redis not available for testing")
 		return
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() //nolint:errcheck // Resource cleanup
 
 	ctx := context.Background()
 
@@ -123,7 +123,7 @@ func TestRedisClient_ImageListOperations(t *testing.T) {
 		t.Skip("Redis not available for testing")
 		return
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() //nolint:errcheck // Resource cleanup
 
 	ctx := context.Background()
 
@@ -192,7 +192,7 @@ func TestRedisClient_StatsOperations(t *testing.T) {
 		t.Skip("Redis not available for testing")
 		return
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() //nolint:errcheck // Resource cleanup
 
 	ctx := context.Background()
 
@@ -228,7 +228,7 @@ func TestRedisClient_HealthAndInfo(t *testing.T) {
 		t.Skip("Redis not available for testing")
 		return
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() //nolint:errcheck // Resource cleanup
 
 	ctx := context.Background()
 

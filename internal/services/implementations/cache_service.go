@@ -25,7 +25,7 @@ func (c *CacheService) GetImage(ctx context.Context, id int) (*image.Image, erro
 	if c.client == nil {
 		return nil, image.ErrCacheUnavailable
 	}
-	
+
 	return c.client.GetImage(ctx, id)
 }
 
@@ -35,7 +35,7 @@ func (c *CacheService) SetImage(ctx context.Context, img *image.Image, expiry in
 		log.Printf("Cache unavailable, skipping image cache for ID %d", img.ID)
 		return nil // Don't fail if cache is unavailable
 	}
-	
+
 	return c.client.SetImage(ctx, img, expiry)
 }
 
@@ -44,7 +44,7 @@ func (c *CacheService) DeleteImage(ctx context.Context, id int) error {
 	if c.client == nil {
 		return nil // Don't fail if cache is unavailable
 	}
-	
+
 	return c.client.DeleteImage(ctx, id)
 }
 
@@ -53,7 +53,7 @@ func (c *CacheService) GetImageList(ctx context.Context, key string) (*image.Lis
 	if c.client == nil {
 		return nil, image.ErrCacheUnavailable
 	}
-	
+
 	return c.client.GetImageList(ctx, key)
 }
 
@@ -63,7 +63,7 @@ func (c *CacheService) SetImageList(ctx context.Context, key string, response *i
 		log.Printf("Cache unavailable, skipping image list cache for key %s", key)
 		return nil // Don't fail if cache is unavailable
 	}
-	
+
 	return c.client.SetImageList(ctx, key, response, expiry)
 }
 
@@ -72,7 +72,7 @@ func (c *CacheService) InvalidateImageLists(ctx context.Context) error {
 	if c.client == nil {
 		return nil // Don't fail if cache is unavailable
 	}
-	
+
 	return c.client.InvalidateImageLists(ctx)
 }
 
@@ -81,7 +81,7 @@ func (c *CacheService) GetStats(ctx context.Context, key string) (interface{}, e
 	if c.client == nil {
 		return nil, image.ErrCacheUnavailable
 	}
-	
+
 	return c.client.GetStats(ctx, key)
 }
 
@@ -91,7 +91,7 @@ func (c *CacheService) SetStats(ctx context.Context, key string, stats interface
 		log.Printf("Cache unavailable, skipping stats cache for key %s", key)
 		return nil // Don't fail if cache is unavailable
 	}
-	
+
 	return c.client.SetStats(ctx, key, stats, expiry)
 }
 
@@ -100,6 +100,6 @@ func (c *CacheService) Health(ctx context.Context) error {
 	if c.client == nil {
 		return image.ErrCacheUnavailable
 	}
-	
+
 	return c.client.Health(ctx)
 }
