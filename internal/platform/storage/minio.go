@@ -19,8 +19,23 @@ type MinIOClient struct {
 }
 
 func NewMinIOClient(cfg config.StorageConfig) (*MinIOClient, error) {
+	var creds *credentials.Credentials
+	
+	// Use AWS credentials chain if no static credentials are provided
+	// This supports EKS Pod Identity, IAM roles, AWS credentials file, etc.
+	if cfg.AccessKeyID == "" || cfg.SecretAccessKey == "" {
+		creds = credentials.NewChainCredentials([]credentials.Provider{
+			&credentials.EnvAWS{},        // AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+			&credentials.FileAWSCredentials{}, // ~/.aws/credentials
+			&credentials.IAM{},           // EC2/ECS/EKS IAM roles
+		})
+	} else {
+		// Fall back to static credentials for local development
+		creds = credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, "")
+	}
+
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+		Creds:  creds,
 		Secure: cfg.UseSSL,
 		Region: cfg.Region,
 	})

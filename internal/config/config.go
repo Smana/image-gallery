@@ -63,8 +63,8 @@ func Load() (*Config, error) {
 		DatabaseURL: getEnv("DATABASE_URL", ""),
 		Storage: StorageConfig{
 			Endpoint:        getEnv("STORAGE_ENDPOINT", "localhost:9000"),
-			AccessKeyID:     getEnv("STORAGE_ACCESS_KEY", "minioadmin"),
-			SecretAccessKey: getEnv("STORAGE_SECRET_KEY", "minioadmin"),
+			AccessKeyID:     getEnv("STORAGE_ACCESS_KEY", ""),
+			SecretAccessKey: getEnv("STORAGE_SECRET_KEY", ""),
 			BucketName:      getEnv("STORAGE_BUCKET", "images"),
 			UseSSL:          useSSL,
 			Region:          getEnv("STORAGE_REGION", "us-east-1"),
