@@ -77,15 +77,13 @@ jobs:
             
             # Build with Dagger
             dagger -m github.com/sagikazarmark/daggerverse/go@v0.9.0 call \
-              --src=. \
-              --version=${{ env.GO_VERSION }} \
               with-platform --platform=$platform \
               with-cgo-disabled \
               build \
-              --package=./cmd/server \
+              --source=. \
+              --pkg=./cmd/server \
               --ldflags="-w -s -X main.version=${{ needs.release-please.outputs.version }}" \
-              --output=image-gallery-${{ needs.release-please.outputs.version }}-${GOOS}-${GOARCH}${EXT} \
-              export --path=./release-assets/
+              export --path=./release-assets/image-gallery-${{ needs.release-please.outputs.version }}-${GOOS}-${GOARCH}${EXT}
           done
           
           # List built assets
@@ -102,12 +100,11 @@ jobs:
           # Build and push versioned image
           dagger call \
             -m github.com/sagikazarmark/daggerverse/go@v0.9.0 \
-            --src=. \
-            --version=${{ env.GO_VERSION }} \
             with-platform --platform=linux/amd64,linux/arm64 \
             with-cgo-disabled \
             build \
-            --package=./cmd/server \
+            --source=. \
+            --pkg=./cmd/server \
             --ldflags="-w -s -X main.version=${{ needs.release-please.outputs.version }}" \
             container \
             --base-image=gcr.io/distroless/static-debian12:nonroot \

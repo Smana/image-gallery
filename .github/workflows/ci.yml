@@ -95,12 +95,10 @@ jobs:
             with-platform --platform=${{ matrix.platform }}
             with-cgo-disabled
             build
-            --src=.
-            --version=${{ env.GO_VERSION }}
-            --package=./cmd/server
+            --source=.
+            --pkg=./cmd/server
             --ldflags="-w -s"
-            --output=${{ steps.platform.outputs.binary_name }}
-            export --path=./bin/
+            export --path=./bin/${{ steps.platform.outputs.binary_name }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
