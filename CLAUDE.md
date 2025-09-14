@@ -138,3 +138,18 @@ The application gracefully degrades when Valkey is unavailable - caching errors 
 - Use the dependency injection container for service resolution
 - Use Dagger for all CI steps when possible. These tests should also be ran locally using Dagger
 - Use atlas for database schema management
+
+
+### Testing GoReleaser Build and Push Workflow
+
+To test the build-push workflow locally (matches GitHub Actions exactly):
+
+```bash
+# Test GoReleaser binary build only
+GITHUB_REPOSITORY=Smana/image-gallery GITHUB_REPOSITORY_OWNER=Smana GITHUB_REPOSITORY_NAME=image-gallery bash -c 'curl -sfL https://goreleaser.com/static/run | bash -s -- build --snapshot --clean --skip=validate'
+
+# Test GoReleaser full release (includes Docker images)
+GITHUB_REPOSITORY=Smana/image-gallery GITHUB_REPOSITORY_OWNER=Smana GITHUB_REPOSITORY_NAME=image-gallery bash -c 'curl -sfL https://goreleaser.com/static/run | bash -s -- release --snapshot --clean --skip=validate'
+```
+
+The release command builds binaries, creates Docker images, and prepares archives - exactly matching the build-push workflow.
