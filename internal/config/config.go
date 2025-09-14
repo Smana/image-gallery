@@ -70,31 +70,31 @@ type ServerConfig struct {
 
 // Load creates a new configuration from environment variables with validation
 func Load() (*Config, error) {
-	useSSL, _ := strconv.ParseBool(getEnv("STORAGE_USE_SSL", "false"))
+	useSSL := parseBoolOrDefault(getEnv("STORAGE_USE_SSL", "false"), false)
 	maxUploadSize := parseSize(getEnv("MAX_UPLOAD_SIZE", "10MB"))
 	allowedTypes := parseList(getEnv("ALLOWED_FILE_TYPES", "image/jpeg,image/png,image/gif,image/webp"))
 
-	readTimeout, _ := time.ParseDuration(getEnv("READ_TIMEOUT", "10s"))
-	writeTimeout, _ := time.ParseDuration(getEnv("WRITE_TIMEOUT", "10s"))
-	idleTimeout, _ := time.ParseDuration(getEnv("SERVER_TIMEOUT", "30s"))
+	readTimeout := parseDurationOrDefault(getEnv("READ_TIMEOUT", "10s"), 10*time.Second)
+	writeTimeout := parseDurationOrDefault(getEnv("WRITE_TIMEOUT", "10s"), 10*time.Second)
+	idleTimeout := parseDurationOrDefault(getEnv("SERVER_TIMEOUT", "30s"), 30*time.Second)
 
 	// Cache configuration
-	cacheEnabled, _ := strconv.ParseBool(getEnv("CACHE_ENABLED", "true"))
-	cacheDB, _ := strconv.Atoi(getEnv("CACHE_DATABASE", "0"))
-	cacheMaxRetries, _ := strconv.Atoi(getEnv("CACHE_MAX_RETRIES", "3"))
-	cachePoolSize, _ := strconv.Atoi(getEnv("CACHE_POOL_SIZE", "10"))
-	cacheMinIdleConns, _ := strconv.Atoi(getEnv("CACHE_MIN_IDLE_CONNS", "5"))
-	cacheMaxIdleConns, _ := strconv.Atoi(getEnv("CACHE_MAX_IDLE_CONNS", "10"))
+	cacheEnabled := parseBoolOrDefault(getEnv("CACHE_ENABLED", "true"), true)
+	cacheDB := parseIntOrDefault(getEnv("CACHE_DATABASE", "0"), 0)
+	cacheMaxRetries := parseIntOrDefault(getEnv("CACHE_MAX_RETRIES", "3"), 3)
+	cachePoolSize := parseIntOrDefault(getEnv("CACHE_POOL_SIZE", "10"), 10)
+	cacheMinIdleConns := parseIntOrDefault(getEnv("CACHE_MIN_IDLE_CONNS", "5"), 5)
+	cacheMaxIdleConns := parseIntOrDefault(getEnv("CACHE_MAX_IDLE_CONNS", "10"), 10)
 
-	cacheMinRetryBackoff, _ := time.ParseDuration(getEnv("CACHE_MIN_RETRY_BACKOFF", "8ms"))
-	cacheMaxRetryBackoff, _ := time.ParseDuration(getEnv("CACHE_MAX_RETRY_BACKOFF", "512ms"))
-	cacheDialTimeout, _ := time.ParseDuration(getEnv("CACHE_DIAL_TIMEOUT", "5s"))
-	cacheReadTimeout, _ := time.ParseDuration(getEnv("CACHE_READ_TIMEOUT", "3s"))
-	cacheWriteTimeout, _ := time.ParseDuration(getEnv("CACHE_WRITE_TIMEOUT", "3s"))
-	cacheMaxConnAge, _ := time.ParseDuration(getEnv("CACHE_MAX_CONN_AGE", "30m"))
-	cachePoolTimeout, _ := time.ParseDuration(getEnv("CACHE_POOL_TIMEOUT", "4s"))
-	cacheIdleTimeout, _ := time.ParseDuration(getEnv("CACHE_IDLE_TIMEOUT", "5m"))
-	cacheDefaultTTL, _ := time.ParseDuration(getEnv("CACHE_DEFAULT_TTL", "1h"))
+	cacheMinRetryBackoff := parseDurationOrDefault(getEnv("CACHE_MIN_RETRY_BACKOFF", "8ms"), 8*time.Millisecond)
+	cacheMaxRetryBackoff := parseDurationOrDefault(getEnv("CACHE_MAX_RETRY_BACKOFF", "512ms"), 512*time.Millisecond)
+	cacheDialTimeout := parseDurationOrDefault(getEnv("CACHE_DIAL_TIMEOUT", "5s"), 5*time.Second)
+	cacheReadTimeout := parseDurationOrDefault(getEnv("CACHE_READ_TIMEOUT", "3s"), 3*time.Second)
+	cacheWriteTimeout := parseDurationOrDefault(getEnv("CACHE_WRITE_TIMEOUT", "3s"), 3*time.Second)
+	cacheMaxConnAge := parseDurationOrDefault(getEnv("CACHE_MAX_CONN_AGE", "30m"), 30*time.Minute)
+	cachePoolTimeout := parseDurationOrDefault(getEnv("CACHE_POOL_TIMEOUT", "4s"), 4*time.Second)
+	cacheIdleTimeout := parseDurationOrDefault(getEnv("CACHE_IDLE_TIMEOUT", "5m"), 5*time.Minute)
+	cacheDefaultTTL := parseDurationOrDefault(getEnv("CACHE_DEFAULT_TTL", "1h"), 1*time.Hour)
 
 	config := &Config{
 		Environment: getEnv("GO_ENV", "development"),
@@ -205,4 +205,28 @@ func MustLoad() *Config {
 		panic(err)
 	}
 	return config
+}
+
+// parseBoolOrDefault parses a boolean string, returning the default value on error
+func parseBoolOrDefault(value string, defaultValue bool) bool {
+	if result, err := strconv.ParseBool(value); err == nil {
+		return result
+	}
+	return defaultValue
+}
+
+// parseIntOrDefault parses an integer string, returning the default value on error
+func parseIntOrDefault(value string, defaultValue int) int {
+	if result, err := strconv.Atoi(value); err == nil {
+		return result
+	}
+	return defaultValue
+}
+
+// parseDurationOrDefault parses a duration string, returning the default value on error
+func parseDurationOrDefault(value string, defaultValue time.Duration) time.Duration {
+	if result, err := time.ParseDuration(value); err == nil {
+		return result
+	}
+	return defaultValue
 }

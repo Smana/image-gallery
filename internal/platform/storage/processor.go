@@ -17,6 +17,12 @@ import (
 	_ "golang.org/x/image/webp" // Import for webp decoding support
 )
 
+// Constants for repeated string literals
+const (
+	formatPNG = "png"
+	formatGIF = "gif"
+)
+
 // ImageInfo represents metadata extracted from an image
 type ImageInfo struct {
 	Width       int
@@ -99,9 +105,9 @@ func (p *ImageProcessor) GenerateThumbnail(ctx context.Context, data io.Reader, 
 	// Encode thumbnail
 	var buf bytes.Buffer
 	switch strings.ToLower(format) {
-	case "png":
+	case formatPNG:
 		err = png.Encode(&buf, dst)
-	case "gif":
+	case formatGIF:
 		err = gif.Encode(&buf, dst, nil)
 	default:
 		// Default to JPEG for all other formats including webp
@@ -134,8 +140,8 @@ func (p *ImageProcessor) GetImageInfo(ctx context.Context, data io.Reader) (*Ima
 	// Try to decode the actual image to get more detailed info
 	if seeker, ok := data.(io.Seeker); ok {
 		// Reset reader to beginning
-		seeker.Seek(0, io.SeekStart)
-		
+		_, _ = seeker.Seek(0, io.SeekStart) //nolint:errcheck // Seeker reset for image info extraction
+
 		img, _, err := image.Decode(data)
 		if err == nil {
 			switch img.ColorModel() {
@@ -177,7 +183,7 @@ func (p *ImageProcessor) Resize(ctx context.Context, data io.Reader, width, heig
 
 	// Check maximum dimensions
 	if width > p.maxWidth || height > p.maxHeight {
-		return nil, fmt.Errorf("requested dimensions %dx%d exceed maximum allowed %dx%d", 
+		return nil, fmt.Errorf("requested dimensions %dx%d exceed maximum allowed %dx%d",
 			width, height, p.maxWidth, p.maxHeight)
 	}
 
@@ -196,9 +202,9 @@ func (p *ImageProcessor) Resize(ctx context.Context, data io.Reader, width, heig
 	// Encode resized image
 	var buf bytes.Buffer
 	switch strings.ToLower(format) {
-	case "png":
+	case formatPNG:
 		err = png.Encode(&buf, dst)
-	case "gif":
+	case formatGIF:
 		err = gif.Encode(&buf, dst, nil)
 	default:
 		// Default to JPEG
@@ -214,15 +220,39 @@ func (p *ImageProcessor) Resize(ctx context.Context, data io.Reader, width, heig
 
 // ValidateImage implements ImageProcessor.ValidateImage
 func (p *ImageProcessor) ValidateImage(ctx context.Context, data io.Reader, contentType string) error {
+	if err := p.validateInputs(data, contentType); err != nil {
+		return err
+	}
+
+	if err := p.validateSupportedContentType(contentType); err != nil {
+		return err
+	}
+
+	config, format, err := p.decodeImageConfig(data)
+	if err != nil {
+		return err
+	}
+
+	if err := p.validateImageDimensions(config); err != nil {
+		return err
+	}
+
+	return p.validateFormatMatchesContentType(format, contentType)
+}
+
+// validateInputs validates the input parameters
+func (p *ImageProcessor) validateInputs(data io.Reader, contentType string) error {
 	if data == nil {
 		return errors.New("data cannot be nil")
 	}
-
 	if contentType == "" {
 		return errors.New("content type cannot be empty")
 	}
+	return nil
+}
 
-	// Check if content type is supported
+// validateSupportedContentType checks if the content type is supported
+func (p *ImageProcessor) validateSupportedContentType(contentType string) error {
 	supportedTypes := map[string]bool{
 		"image/jpeg": true,
 		"image/jpg":  true,
@@ -234,24 +264,33 @@ func (p *ImageProcessor) ValidateImage(ctx context.Context, data io.Reader, cont
 	if !supportedTypes[contentType] {
 		return fmt.Errorf("unsupported content type: %s", contentType)
 	}
+	return nil
+}
 
-	// Try to decode image to validate it's actually an image
+// decodeImageConfig decodes the image configuration
+func (p *ImageProcessor) decodeImageConfig(data io.Reader) (image.Config, string, error) {
 	config, format, err := image.DecodeConfig(data)
 	if err != nil {
-		return fmt.Errorf("invalid image data: %w", err)
+		return image.Config{}, "", fmt.Errorf("invalid image data: %w", err)
 	}
+	return config, format, nil
+}
 
-	// Validate dimensions
+// validateImageDimensions validates the image dimensions
+func (p *ImageProcessor) validateImageDimensions(config image.Config) error {
 	if config.Width <= 0 || config.Height <= 0 {
 		return fmt.Errorf("invalid image dimensions: %dx%d", config.Width, config.Height)
 	}
 
 	if config.Width > p.maxWidth || config.Height > p.maxHeight {
-		return fmt.Errorf("image dimensions %dx%d exceed maximum allowed %dx%d", 
+		return fmt.Errorf("image dimensions %dx%d exceed maximum allowed %dx%d",
 			config.Width, config.Height, p.maxWidth, p.maxHeight)
 	}
+	return nil
+}
 
-	// Validate format matches content type
+// validateFormatMatchesContentType validates that the image format matches the content type
+func (p *ImageProcessor) validateFormatMatchesContentType(format, contentType string) error {
 	expectedFormats := map[string][]string{
 		"image/jpeg": {"jpeg"},
 		"image/jpg":  {"jpeg"},
@@ -260,20 +299,22 @@ func (p *ImageProcessor) ValidateImage(ctx context.Context, data io.Reader, cont
 		"image/webp": {"webp"},
 	}
 
-	if expectedList, ok := expectedFormats[contentType]; ok {
-		formatValid := false
-		for _, expectedFormat := range expectedList {
-			if format == expectedFormat {
-				formatValid = true
-				break
-			}
-		}
-		if !formatValid {
-			return fmt.Errorf("image format %s doesn't match content type %s", format, contentType)
-		}
+	expectedList, ok := expectedFormats[contentType]
+	if !ok {
+		return nil // No validation needed for unknown content types
 	}
 
-	return nil
+	return p.checkFormatInList(format, contentType, expectedList)
+}
+
+// checkFormatInList checks if the format is in the expected format list
+func (p *ImageProcessor) checkFormatInList(format, contentType string, expectedList []string) error {
+	for _, expectedFormat := range expectedList {
+		if format == expectedFormat {
+			return nil // Format matches
+		}
+	}
+	return fmt.Errorf("image format %s doesn't match content type %s", format, contentType)
 }
 
 // OptimizeImage implements ImageProcessor.OptimizeImage
@@ -295,20 +336,20 @@ func (p *ImageProcessor) OptimizeImage(ctx context.Context, data io.Reader, qual
 	var buf bytes.Buffer
 
 	switch strings.ToLower(format) {
-	case "png":
+	case formatPNG:
 		// For PNG, we can only optimize by re-encoding
 		// PNG is lossless, so quality doesn't apply
 		encoder := &png.Encoder{
 			CompressionLevel: png.BestCompression,
 		}
 		err = encoder.Encode(&buf, src)
-		
-	case "gif":
+
+	case formatGIF:
 		// For GIF, optimize by re-encoding with better compression
 		err = gif.Encode(&buf, src, &gif.Options{
 			NumColors: 256, // Standard GIF palette
 		})
-		
+
 	default:
 		// For JPEG and others, apply quality compression
 		err = jpeg.Encode(&buf, src, &jpeg.Options{Quality: quality})
@@ -323,16 +364,16 @@ func (p *ImageProcessor) OptimizeImage(ctx context.Context, data io.Reader, qual
 
 // GetSupportedFormats returns the list of supported image formats
 func (p *ImageProcessor) GetSupportedFormats() []string {
-	return []string{"jpeg", "jpg", "png", "gif", "webp"}
+	return []string{"jpeg", "jpg", formatPNG, formatGIF, "webp"}
 }
 
 // GetMaxDimensions returns the maximum allowed dimensions
-func (p *ImageProcessor) GetMaxDimensions() (int, int) {
+func (p *ImageProcessor) GetMaxDimensions() (maxWidth, maxHeight int) {
 	return p.maxWidth, p.maxHeight
 }
 
 // CalculateOptimalThumbnailSize calculates optimal thumbnail dimensions
-func (p *ImageProcessor) CalculateOptimalThumbnailSize(srcWidth, srcHeight, maxWidth, maxHeight int) (int, int) {
+func (p *ImageProcessor) CalculateOptimalThumbnailSize(srcWidth, srcHeight, maxWidth, maxHeight int) (width, height int) {
 	if srcWidth <= 0 || srcHeight <= 0 {
 		return maxWidth, maxHeight
 	}

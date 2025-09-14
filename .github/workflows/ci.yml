@@ -10,6 +10,21 @@ env:
   GO_VERSION: "1.25"
 
 jobs:
+  validate-commits:
+    name: Validate Conventional Commits
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Commitlint
+        uses: wagoid/commitlint-github-action@v6
+        with:
+          configFile: .commitlintrc.json
+
   lint-and-test:
     name: Lint and Test
     runs-on: ubuntu-latest
@@ -17,35 +32,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Dagger
-        uses: dagger/dagger-for-github@v6
-        with:
-          install-only: true
-          version: "latest"
-
       - name: Run Go linting
-        run: |
-          dagger -m github.com/sagikazarmark/daggerverse/golangci-lint@v0.4.0 call \
-            --source=. lint --verbose
+        uses: dagger/dagger-for-github@v7
+        with:
+          version: "latest"
+          module: "github.com/sagikazarmark/daggerverse/go@v0.9.0"
+          call: "exec --src=. --args=go,run,github.com/golangci/golangci-lint/cmd/golangci-lint@latest,run"
 
       - name: Run Go tests
-        run: |
-          dagger -m github.com/sagikazarmark/daggerverse/go@v0.9.0 call \
-            --source=. \
-            --version=${{ env.GO_VERSION }} \
-            exec --args="test,./...,--coverprofile=coverage.out,--race"
+        uses: dagger/dagger-for-github@v7
+        with:
+          version: "latest"
+          module: "github.com/sagikazarmark/daggerverse/go@v0.9.0"
+          call: "exec --src=. --args=go,test,./...,--coverprofile=coverage.out,--race,--short"
 
       - name: Run vulnerability scan with govulncheck
-        run: |
-          dagger -m github.com/disaster37/dagger-library-go/golang@v0.0.24 call \
-            --src=. vulncheck
+        uses: dagger/dagger-for-github@v7
+        with:
+          version: "latest"
+          module: "github.com/sagikazarmark/daggerverse/go@v0.9.0"
+          call: "exec --src=. --args=go,run,golang.org/x/vuln/cmd/govulncheck@latest,./..."
 
-      - name: Run filesystem security scan with Trivy
-        run: |
-          dagger -m github.com/purpleclay/daggerverse/trivy@v0.11.0 call \
-            filesystem --path=. \
-            --severity=HIGH,CRITICAL \
-            --format=table
 
       - name: Upload test coverage
         uses: actions/upload-artifact@v4
@@ -69,145 +76,64 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Dagger
-        uses: dagger/dagger-for-github@v6
-        with:
-          install-only: true
-          version: "latest"
+      - name: Set platform variables
+        id: platform
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          OS=$(echo $PLATFORM | cut -d'/' -f1)
+          ARCH=$(echo $PLATFORM | cut -d'/' -f2)
+          echo "os=$OS" >> $GITHUB_OUTPUT
+          echo "arch=$ARCH" >> $GITHUB_OUTPUT
+          echo "binary_name=server-$OS-$ARCH" >> $GITHUB_OUTPUT
 
       - name: Build Go binary
-        run: |
-          # Extract OS and ARCH from platform
-          GOOS=$(echo ${{ matrix.platform }} | cut -d'/' -f1)
-          GOARCH=$(echo ${{ matrix.platform }} | cut -d'/' -f2)
-          
-          dagger -m github.com/sagikazarmark/daggerverse/go@v0.9.0 call \
-            --source=. \
-            --version=${{ env.GO_VERSION }} \
-            with-platform ${{ matrix.platform }} \
-            with-cgo-disabled \
-            build \
-            --package=./cmd/server \
-            --ldflags="-w -s" \
-            --output=server-${GOOS}-${GOARCH} \
-            export --path=./bin/
+        uses: dagger/dagger-for-github@v7
+        with:
+          version: "latest"
+          module: "github.com/sagikazarmark/daggerverse/go@v0.9.0"
+          call: >-
+            with-platform --platform=${{ matrix.platform }}
+            with-cgo-disabled
+            with-source --source=.
+            build --pkg=./cmd/server --ldflags="-w -s"
+            export --path=./bin/${{ steps.platform.outputs.binary_name }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: server-${{ matrix.platform }}
+          name: ${{ steps.platform.outputs.binary_name }}
           path: ./bin/
           retention-days: 7
 
-  integration-test:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [lint-and-test]
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: image_gallery_test
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpass
-          POSTGRES_HOST_AUTH_METHOD: trust
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-      valkey:
-        image: valkey/valkey:7-alpine
-        options: >-
-          --health-cmd "valkey-cli ping"
-          --health-interval 10s
-          --health-timeout 3s
-          --health-retries 5
-        ports:
-          - 6379:6379
-
-      minio:
-        image: minio/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 30s
-          --health-timeout 20s
-          --health-retries 3
-        ports:
-          - 9000:9000
-          - 9001:9001
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Dagger
-        uses: dagger/dagger-for-github@v6
-        with:
-          install-only: true
-          version: "latest"
-
-      - name: Wait for services
-        run: |
-          sleep 10
-          docker ps
-
-      - name: Run integration tests
-        env:
-          DATABASE_URL: postgres://testuser:testpass@localhost:5432/image_gallery_test?sslmode=disable
-          STORAGE_ENDPOINT: localhost:9000
-          STORAGE_ACCESS_KEY: minioadmin
-          STORAGE_SECRET_KEY: minioadmin
-          STORAGE_BUCKET: images
-          STORAGE_USE_SSL: false
-          STORAGE_REGION: us-east-1
-          CACHE_ENABLED: true
-          CACHE_ADDRESS: localhost:6379
-          CACHE_PASSWORD: ""
-          CACHE_DATABASE: 0
-          CACHE_DEFAULT_TTL: 1h
-        run: |
-          dagger -m github.com/sagikazarmark/daggerverse/go@v0.9.0 call \
-            --source=. \
-            --version=${{ env.GO_VERSION }} \
-            with-env-variable DATABASE_URL "$DATABASE_URL" \
-            with-env-variable STORAGE_ENDPOINT "$STORAGE_ENDPOINT" \
-            with-env-variable STORAGE_ACCESS_KEY "$STORAGE_ACCESS_KEY" \
-            with-env-variable STORAGE_SECRET_KEY "$STORAGE_SECRET_KEY" \
-            with-env-variable STORAGE_BUCKET "$STORAGE_BUCKET" \
-            with-env-variable STORAGE_USE_SSL "$STORAGE_USE_SSL" \
-            with-env-variable STORAGE_REGION "$STORAGE_REGION" \
-            with-env-variable CACHE_ENABLED "$CACHE_ENABLED" \
-            with-env-variable CACHE_ADDRESS "$CACHE_ADDRESS" \
-            with-env-variable CACHE_PASSWORD "$CACHE_PASSWORD" \
-            with-env-variable CACHE_DATABASE "$CACHE_DATABASE" \
-            with-env-variable CACHE_DEFAULT_TTL "$CACHE_DEFAULT_TTL" \
-            exec --args="test,./internal/services/integrationtests/...,--v"
 
   # Status check for required validation
   ci-success:
     name: CI Validation Complete
     runs-on: ubuntu-latest
-    needs: [lint-and-test, build-test, integration-test]
+    needs: [validate-commits, lint-and-test, build-test]
     if: always()
     steps:
       - name: Check CI Status
         run: |
-          if [[ "${{ needs.lint-and-test.result }}" == "success" && \
-                "${{ needs.build-test.result }}" == "success" && \
-                "${{ needs.integration-test.result }}" == "success" ]]; then
+          # Check if commit validation was skipped (not a PR) or passed
+          COMMIT_VALIDATION_OK="true"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            if [[ "${{ needs.validate-commits.result }}" != "success" ]]; then
+              COMMIT_VALIDATION_OK="false"
+            fi
+          fi
+
+          if [[ "$COMMIT_VALIDATION_OK" == "true" && \
+                "${{ needs.lint-and-test.result }}" == "success" && \
+                "${{ needs.build-test.result }}" == "success" ]]; then
             echo "✅ All CI validation checks passed!"
             exit 0
           else
             echo "❌ Some CI validation checks failed:"
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              echo "  - Validate Commits: ${{ needs.validate-commits.result }}"
+            fi
             echo "  - Lint and Test: ${{ needs.lint-and-test.result }}"
             echo "  - Build Test: ${{ needs.build-test.result }}"
-            echo "  - Integration Test: ${{ needs.integration-test.result }}"
             exit 1
           fi

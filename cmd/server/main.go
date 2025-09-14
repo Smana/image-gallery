@@ -34,23 +34,43 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Error closing database connection: %v", err)
+		}
+	}()
 
 	if err := database.RunMigrations(db); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("Error closing database connection: %v", closeErr)
+		}
+		log.Printf("Failed to run migrations: %v", err)
+		os.Exit(1)
 	}
 
 	storageClient, err := storage.NewMinIOClient(cfg.Storage)
 	if err != nil {
-		log.Fatalf("Failed to connect to storage: %v", err)
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("Error closing database connection: %v", closeErr)
+		}
+		log.Printf("Failed to connect to storage: %v", err)
+		os.Exit(1)
 	}
 
 	// Initialize dependency injection container
 	container, err := services.NewContainer(cfg, db, storageClient)
 	if err != nil {
-		log.Fatalf("Failed to initialize services container: %v", err)
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("Error closing database connection: %v", closeErr)
+		}
+		log.Printf("Failed to initialize services container: %v", err)
+		os.Exit(1)
 	}
-	defer container.Close()
+	defer func() {
+		if err := container.Close(); err != nil {
+			log.Printf("Error closing services container: %v", err)
+		}
+	}()
 
 	handler := handlers.NewWithContainer(container)
 
@@ -59,7 +79,8 @@ func main() {
 	go func() {
 		log.Printf("Server starting on port %s", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			log.Printf("Server failed to start: %v", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -72,7 +93,7 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Printf("Server forced to shutdown: %v", err)
 	}
 
 	fmt.Println("Server exited")

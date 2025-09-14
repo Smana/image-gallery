@@ -308,12 +308,12 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 		assert.Equal(t, 1, response.Page)
 		assert.Equal(t, 10, response.PageSize)
 		assert.Equal(t, 1, response.TotalPages)
-		
+
 		// Verify first image conversion
 		assert.Equal(t, 1, response.Images[0].ID)
 		assert.Equal(t, "image1.jpg", response.Images[0].Filename)
 		assert.Equal(t, "image/jpeg", response.Images[0].ContentType)
-		
+
 		mockDB.AssertExpectations(t)
 	})
 
@@ -350,7 +350,7 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 
 		// Mock both calls - one for listing, one for counting
 		mockDB.On("GetByTags", ctx, expectedTags, false, expectedPagination).Return(dbImages, nil)
-		
+
 		// Mock the CountByTag call with the expected pagination for counting
 		countPagination := database.PaginationParams{
 			Limit:  1000, // As per our CountByTag implementation
@@ -367,7 +367,7 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 		assert.Len(t, response.Images, 1)
 		assert.Equal(t, 1, response.Images[0].ID)
 		assert.Equal(t, "nature1.jpg", response.Images[0].Filename)
-		
+
 		mockDB.AssertExpectations(t)
 	})
 }

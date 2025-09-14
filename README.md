@@ -21,17 +21,13 @@ graph TB
         API
         Web
     end
-
-    subgraph "CI/CD"
-        Dagger[Dagger Pipelines]
-        GHA[GitHub Actions]
-        Security[Trivy Security]
-    end
-
-    Dagger --> API
-    GHA --> Dagger
-    Security --> API
 ```
+
+### Infrastructure Components
+
+- **PostgreSQL Database**: Primary data store for image metadata, tags, and albums
+- **S3 Storage (MinIO/AWS)**: Object storage for actual image files and binary data
+- **Valkey Cache**: Performance optimization layer with graceful degradation
 
 ## 🚀 Quick Start
 
@@ -71,6 +67,7 @@ make build
 ### Operations
 - **[CI/CD Pipeline](docs/DAGGER_CI.md)** - Dagger-based continuous integration
 - **[Security Practices](docs/SECURITY.md)** - Security scanning and best practices
+- **[Release Process](docs/DEVELOPMENT.md#-release-process)** - Automated releases with conventional commits
 
 ### Features
 - **Clean Architecture** with dependency injection
@@ -99,6 +96,9 @@ make lint                   # Code linting
 # Dagger CI (containerized)
 make dagger-ci              # Run complete CI pipeline locally
 make install-tools          # Install Dagger and other tools
+
+# Release
+make release                # Prepare and validate for release
 
 # Infrastructure
 docker-compose up -d        # Start services

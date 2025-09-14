@@ -4,18 +4,28 @@ run:
   tests: true
   modules-download-mode: readonly
 
-output:
-  formats:
-    - format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocyclo
+    - misspell
+    - gocritic
+    - goconst
+    - gosec
+    - unconvert
+    - dupl
+    - prealloc
+    - gofmt
+    - goimports
 
 linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
-  govet:
-    check-shadowing: true
   gocyclo:
     min-complexity: 10
   dupl:
@@ -36,30 +46,9 @@ linters-settings:
       - wrapperFunc
       - dupImport
       - ifElseChain
-
-linters:
-  enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
-    - gocyclo
-    - gofmt
-    - goimports
-    - misspell
-    - gocritic
-    - goconst
-    - gosec
-    - unconvert
-    - dupl
-    - prealloc
-  disable:
-    - deadcode # deprecated
-    - varcheck # deprecated
-    - structcheck # deprecated
+      - paramTypeCombine
+      - hugeParam
+      - exitAfterDefer
 
 issues:
   exclude-use-default: false
@@ -70,6 +59,7 @@ issues:
         - errcheck
         - dupl
         - gosec
+        - goconst
     - path: cmd/
       linters:
         - gocyclo

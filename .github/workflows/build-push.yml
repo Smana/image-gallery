@@ -21,10 +21,17 @@ jobs:
     outputs:
       proceed: ${{ steps.check.outputs.proceed }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Check if we should proceed
         id: check
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          # Check if this is a release commit (skip if release-please is handling it)
+          if git log -1 --pretty=format:"%s" | grep -E "^(chore|release).*release"; then
+            echo "Release commit detected - skipping to avoid duplicate images"
+            echo "proceed=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
             echo "Direct push to main - proceeding"
             echo "proceed=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
@@ -35,8 +42,8 @@ jobs:
             echo "proceed=false" >> $GITHUB_OUTPUT
           fi
 
-  docker-build:
-    name: Build and Push Docker Image
+  goreleaser-build:
+    name: Build and Push with GoReleaser
     runs-on: ubuntu-latest
     needs: [check-ci]
     if: needs.check-ci.outputs.proceed == 'true'
@@ -47,12 +54,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Dagger
-        uses: dagger/dagger-for-github@v6
         with:
-          install-only: true
-          version: "latest"
+          fetch-depth: 0  # GoReleaser needs full git history
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -61,60 +64,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build binaries and containers with GoReleaser
+        uses: dagger/dagger-for-github@v7
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          DOCKER_BUILDKIT: 1
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        run: |
-          dagger call \
-            -m github.com/sagikazarmark/daggerverse/go@v0.9.0 \
-            --source=. \
-            --version=${{ env.GO_VERSION }} \
-            with-platform linux/amd64,linux/arm64 \
-            with-cgo-disabled \
-            build \
-            --package=./cmd/server \
-            --ldflags="-w -s" \
-            container \
-            --base-image=gcr.io/distroless/static-debian12:nonroot \
-            --binary-name=server \
-            with-label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
-            with-label org.opencontainers.image.revision=${{ github.sha }} \
-            with-label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-            with-label org.opencontainers.image.title=image-gallery \
-            with-label org.opencontainers.image.description="Modern Go image gallery application" \
-            with-exposed-port 8080 \
-            publish --address=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-
-      - name: Tag as latest
-        if: github.ref == 'refs/heads/main'
-        run: |
-          dagger call \
-            -m github.com/sagikazarmark/daggerverse/go@v0.9.0 \
-            --source=. \
-            --version=${{ env.GO_VERSION }} \
-            with-platform linux/amd64,linux/arm64 \
-            with-cgo-disabled \
-            build \
-            --package=./cmd/server \
-            --ldflags="-w -s" \
-            container \
-            --base-image=gcr.io/distroless/static-debian12:nonroot \
-            --binary-name=server \
-            with-label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
-            with-label org.opencontainers.image.revision=${{ github.sha }} \
-            with-label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-            with-label org.opencontainers.image.title=image-gallery \
-            with-label org.opencontainers.image.description="Modern Go image gallery application" \
-            with-exposed-port 8080 \
-            publish --address=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          version: "latest"
+          module: "github.com/goreleaser/goreleaser@v2.7.0"
+          call: >-
+            run
+            --context=.
+            --args=release,--snapshot,--clean,--skip=publish,--skip=validate
 
       - name: Generate SBOM
         run: |
@@ -125,8 +91,8 @@ jobs:
   security-scan:
     name: Container Security Scan
     runs-on: ubuntu-latest
-    needs: [docker-build]
-    if: always() && needs.docker-build.result == 'success'
+    needs: [goreleaser-build]
+    if: always() && needs.goreleaser-build.result == 'success'
     permissions:
       security-events: write
     steps:
@@ -134,19 +100,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Dagger
-        uses: dagger/dagger-for-github@v6
+        uses: dagger/dagger-for-github@v7
         with:
-          install-only: true
           version: "latest"
 
       - name: Run Trivy container security scan (SARIF)
-        run: |
-          dagger -m github.com/purpleclay/daggerverse/trivy@v0.11.0 call \
-            image \
-            --ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            --severity=HIGH,CRITICAL \
-            --format=sarif \
-            --output=trivy-results.sarif
+        uses: dagger/dagger-for-github@v7
+        with:
+          version: "latest"
+          module: "github.com/jpadams/daggerverse/trivy@v0.6.0"
+          call: "scan-image --image-ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --severity=HIGH,CRITICAL --format=sarif"
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
@@ -155,21 +118,18 @@ jobs:
           sarif_file: trivy-results.sarif
 
       - name: Run Trivy container scan (table format for logs)
-        run: |
-          dagger -m github.com/purpleclay/daggerverse/trivy@v0.11.0 call \
-            image \
-            --ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            --severity=HIGH,CRITICAL \
-            --format=table
+        uses: dagger/dagger-for-github@v7
+        with:
+          version: "latest"
+          module: "github.com/jpadams/daggerverse/trivy@v0.6.0"
+          call: "scan-image --image-ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --severity=HIGH,CRITICAL --format=table"
 
       - name: Run Trivy container scan (JSON for artifact)
-        run: |
-          dagger -m github.com/purpleclay/daggerverse/trivy@v0.11.0 call \
-            image \
-            --ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            --severity=HIGH,CRITICAL \
-            --format=json \
-            --output=trivy-results.json
+        uses: dagger/dagger-for-github@v7
+        with:
+          version: "latest"
+          module: "github.com/jpadams/daggerverse/trivy@v0.6.0"
+          call: "scan-image --image-ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --severity=HIGH,CRITICAL --format=json"
 
       - name: Upload security scan results
         uses: actions/upload-artifact@v4
@@ -185,8 +145,8 @@ jobs:
   release-artifacts:
     name: Create Release Artifacts
     runs-on: ubuntu-latest
-    needs: [docker-build, security-scan]
-    if: always() && needs.docker-build.result == 'success'
+    needs: [goreleaser-build, security-scan]
+    if: always() && needs.goreleaser-build.result == 'success'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -202,24 +162,24 @@ jobs:
         run: |
           cat > release-notes.md << EOF
           # Image Gallery Release
-          
+
           **Build**: \`${{ github.sha }}\`
           **Date**: \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`
           **Go Version**: \`${{ env.GO_VERSION }}\`
-          
+
           ## Container Images
           - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}\`
           - \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`
-          
+
           ## Platforms
           - linux/amd64
           - linux/arm64
-          
+
           ## Security
           - ✅ Vulnerability scanning completed
           - ✅ Container security scan passed
           - ✅ Distroless base image
-          
+
           Generated by GitHub Actions
           EOF
 
@@ -234,8 +194,8 @@ jobs:
   deploy-success:
     name: Deployment Complete
     runs-on: ubuntu-latest
-    needs: [docker-build, security-scan]
-    if: always() && needs.docker-build.result == 'success'
+    needs: [goreleaser-build, security-scan]
+    if: always() && needs.goreleaser-build.result == 'success'
     steps:
       - name: Report deployment status
         run: |

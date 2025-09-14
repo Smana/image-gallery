@@ -131,16 +131,16 @@ func TestLoadWithEnvironmentValidation(t *testing.T) {
 	}
 
 	for _, env := range envVars {
-		os.Unsetenv(env)
+		_ = os.Unsetenv(env)
 	}
 	defer func() {
 		for _, env := range envVars {
-			os.Unsetenv(env)
+			_ = os.Unsetenv(env)
 		}
 	}()
 
 	// Set test environment for valid config
-	os.Setenv("GO_ENV", "test")
+	_ = os.Setenv("GO_ENV", "test")
 	config, err := Load()
 	assert.NoError(t, err)
 	assert.NotNil(t, config)

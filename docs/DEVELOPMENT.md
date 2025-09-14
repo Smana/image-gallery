@@ -447,3 +447,157 @@ The application exposes RESTful APIs for image management:
 - `DELETE /api/images/:id` - Delete image
 
 For detailed API documentation, start the server and visit `/docs` (when implemented).
+
+## 🚀 Release Process
+
+The project uses **Release Please** for automated releases based on **Conventional Commits**.
+
+### Conventional Commits
+
+All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+```bash
+# Format
+type(scope): description
+
+# Examples
+feat: add user authentication system
+fix: resolve memory leak in image processing
+feat!: remove deprecated API endpoints (breaking change)
+docs: update README with installation instructions
+ci: add release-please workflow
+```
+
+### Commit Types
+
+- **feat**: New feature (minor version bump)
+- **fix**: Bug fix (patch version bump)
+- **feat!** or **fix!**: Breaking change (major version bump)
+- **docs**: Documentation changes
+- **style**: Code style changes (formatting, etc.)
+- **refactor**: Code refactoring
+- **perf**: Performance improvements
+- **test**: Adding or updating tests
+- **build**: Build system changes
+- **ci**: CI/CD changes
+- **chore**: Maintenance tasks
+
+### Release Command
+
+Use the `make release` command to validate your code before creating a release:
+
+```bash
+# Prepare for release
+make release
+```
+
+This command will:
+1. ✅ Run complete CI pipeline (lint, test, security scan)
+2. ✅ Check conventional commit format
+3. ✅ Validate git status (clean working directory)
+4. ✅ Ensure you're on main branch
+5. ✅ Check for unpushed commits
+6. 📋 Guide you through the release process
+
+### Automated Release Process
+
+1. **Commit Changes**: Use conventional commit messages
+   ```bash
+   git add .
+   git commit -m "feat: add new image processing feature"
+   git push origin main
+   ```
+
+2. **Release Please Action**: Automatically creates a Release PR
+   - Updates version numbers
+   - Generates changelog
+   - Prepares release notes
+
+3. **Review Release PR**: Review the generated changelog and version bump
+
+4. **Merge Release PR**: When ready, merge the Release PR
+
+5. **Automated Release**: After merging, the workflow automatically:
+   - Creates GitHub release
+   - Builds multi-platform binaries
+   - Builds and pushes container images
+   - Runs security scans
+   - Uploads release assets
+
+### Release Assets
+
+Each release includes:
+
+#### Binaries
+- `image-gallery-VERSION-linux-amd64`
+- `image-gallery-VERSION-linux-arm64`
+- `image-gallery-VERSION-darwin-amd64`
+- `image-gallery-VERSION-darwin-arm64`
+- `image-gallery-VERSION-windows-amd64.exe`
+- `checksums.txt` - SHA256 checksums for verification
+
+#### Container Images
+```bash
+# Pull release image
+docker pull ghcr.io/USER/image-gallery:VERSION
+
+# Run the application
+docker run -p 8080:8080 ghcr.io/USER/image-gallery:VERSION
+```
+
+#### Security Reports
+- Trivy vulnerability scan results
+- SARIF reports uploaded to GitHub Security tab
+
+### Manual Release (Emergency)
+
+For emergency releases or manual intervention:
+
+```bash
+# 1. Ensure clean state
+make release
+
+# 2. Create and push tag manually
+git tag v1.2.3
+git push origin v1.2.3
+
+# 3. Create GitHub release manually using the tag
+# The release workflow will still build and upload assets
+```
+
+### Version Numbering
+
+The project follows [Semantic Versioning](https://semver.org/):
+
+- **MAJOR**: Breaking changes (`feat!`, `fix!`)
+- **MINOR**: New features (`feat`)
+- **PATCH**: Bug fixes (`fix`)
+
+Examples:
+- `v1.0.0` → `v1.0.1` (fix: bug fix)
+- `v1.0.1` → `v1.1.0` (feat: new feature)
+- `v1.1.0` → `v2.0.0` (feat!: breaking change)
+
+### Release Workflow Files
+
+- `.github/workflows/release-please.yml` - Main release workflow  
+- `.github/workflows/ci.yml` - Main CI pipeline including commit validation
+- `release-please-config.json` - Release Please configuration
+- `.release-please-manifest.json` - Version manifest
+
+### Troubleshooting Releases
+
+#### Release PR Not Created
+- Check that commits follow conventional format
+- Ensure commits are pushed to main branch
+- Review GitHub Actions logs
+
+#### Invalid Commit Format
+- PR validation will fail with helpful messages
+- Use `git rebase -i` to fix commit messages
+- Follow the conventional commits guide
+
+#### Missing Release Assets
+- Check the release workflow logs
+- Ensure Dagger modules are accessible
+- Verify container registry permissions

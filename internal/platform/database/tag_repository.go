@@ -177,7 +177,7 @@ func (r *tagRepository) GetPopular(ctx context.Context, limit int) ([]*Tag, erro
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
 
 	var tags []*Tag
 	for rows.Next() {
@@ -216,7 +216,7 @@ func (r *tagRepository) GetWithImageCount(ctx context.Context, pagination Pagina
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
 
 	var tags []*Tag
 	for rows.Next() {
@@ -305,33 +305,8 @@ func (r *tagRepository) GetTagImages(ctx context.Context, tagID int, pagination 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var images []*Image
-	for rows.Next() {
-		image := &Image{}
-		err := rows.Scan(
-			&image.ID,
-			&image.Filename,
-			&image.OriginalFilename,
-			&image.ContentType,
-			&image.FileSize,
-			&image.StoragePath,
-			&image.ThumbnailPath,
-			&image.Width,
-			&image.Height,
-			&image.UploadedAt,
-			&image.Metadata,
-			&image.CreatedAt,
-			&image.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		images = append(images, image)
-	}
-
-	return images, rows.Err()
+	return scanImages(ctx, rows)
 }
 
 // CountImageTags returns the number of tags for an image
@@ -354,7 +329,7 @@ func (r *tagRepository) scanTags(ctx context.Context, query string, args ...inte
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
 
 	var tags []*Tag
 	for rows.Next() {

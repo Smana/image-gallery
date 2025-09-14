@@ -3,6 +3,8 @@ package implementations
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"time"
 
 	"image-gallery/internal/domain/image"
 )
@@ -21,7 +23,21 @@ func NewTagRepository(db *sql.DB) image.TagRepository {
 
 // Create stores a new tag in the repository
 func (r *TagRepositoryImpl) Create(ctx context.Context, tag *image.Tag) error {
-	// TODO: Implement actual database insertion
+	if tag == nil {
+		return fmt.Errorf("tag cannot be nil")
+	}
+
+	query := `
+		INSERT INTO tags (name, created_at)
+		VALUES ($1, $2)
+		RETURNING id
+	`
+
+	err := r.db.QueryRowContext(ctx, query, tag.Name, tag.CreatedAt).Scan(&tag.ID)
+	if err != nil {
+		return fmt.Errorf("failed to create tag: %w", err)
+	}
+
 	return nil
 }
 
@@ -33,8 +49,26 @@ func (r *TagRepositoryImpl) GetByID(ctx context.Context, id int) (*image.Tag, er
 
 // GetByName retrieves a tag by its name
 func (r *TagRepositoryImpl) GetByName(ctx context.Context, name string) (*image.Tag, error) {
-	// TODO: Implement actual database query
-	return nil, nil
+	if name == "" {
+		return nil, fmt.Errorf("tag name cannot be empty")
+	}
+
+	query := `SELECT id, name, created_at FROM tags WHERE name = $1`
+	var tag image.Tag
+	err := r.db.QueryRowContext(ctx, query, name).Scan(
+		&tag.ID,
+		&tag.Name,
+		&tag.CreatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Tag not found, return nil (not an error for this method)
+		}
+		return nil, fmt.Errorf("failed to query tag by name: %w", err)
+	}
+
+	return &tag, nil
 }
 
 // List retrieves all tags or tags matching criteria
@@ -51,8 +85,38 @@ func (r *TagRepositoryImpl) Delete(ctx context.Context, id int) error {
 
 // GetOrCreate gets an existing tag or creates a new one
 func (r *TagRepositoryImpl) GetOrCreate(ctx context.Context, name string) (*image.Tag, error) {
-	// TODO: Implement get or create logic
-	return nil, nil
+	if name == "" {
+		return nil, fmt.Errorf("tag name cannot be empty")
+	}
+
+	// First try to get existing tag
+	existing, err := r.GetByName(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for existing tag: %w", err)
+	}
+
+	// If tag exists, return it
+	if existing != nil {
+		return existing, nil
+	}
+
+	// Tag doesn't exist, create it
+	newTag := &image.Tag{
+		Name:      name,
+		CreatedAt: time.Now(),
+	}
+
+	// Validate the tag before creating
+	if err := newTag.Validate(); err != nil {
+		return nil, fmt.Errorf("tag validation failed: %w", err)
+	}
+
+	// Create the tag in database
+	if err := r.Create(ctx, newTag); err != nil {
+		return nil, fmt.Errorf("failed to create tag: %w", err)
+	}
+
+	return newTag, nil
 }
 
 // GetPopularTags returns the most frequently used tags

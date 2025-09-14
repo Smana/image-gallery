@@ -17,7 +17,7 @@ func NewConnection(dbURL string) (*sql.DB, error) {
 	}
 
 	if err := db.Ping(); err != nil {
-		db.Close()
+		_ = db.Close() //nolint:errcheck // Connection cleanup in error path
 		return nil, err
 	}
 

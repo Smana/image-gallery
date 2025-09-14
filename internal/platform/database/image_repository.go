@@ -50,17 +50,10 @@ func (r *imageRepository) Create(ctx context.Context, image *Image) error {
 	return err
 }
 
-// GetByID retrieves an image by its ID
-func (r *imageRepository) GetByID(ctx context.Context, id int) (*Image, error) {
-	query := `
-		SELECT id, filename, original_filename, content_type, file_size,
-			   storage_path, thumbnail_path, width, height, uploaded_at,
-			   metadata, created_at, updated_at
-		FROM images WHERE id = $1
-	`
-
+// scanSingleImage scans a single image row and handles not found errors
+func (r *imageRepository) scanSingleImage(ctx context.Context, query string, notFoundMsg string, args ...interface{}) (*Image, error) {
 	image := &Image{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(
 		&image.ID,
 		&image.Filename,
 		&image.OriginalFilename,
@@ -77,10 +70,22 @@ func (r *imageRepository) GetByID(ctx context.Context, id int) (*Image, error) {
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("image with ID %d not found", id)
+		return nil, fmt.Errorf("%s", notFoundMsg)
 	}
 
 	return image, err
+}
+
+// GetByID retrieves an image by its ID
+func (r *imageRepository) GetByID(ctx context.Context, id int) (*Image, error) {
+	query := `
+		SELECT id, filename, original_filename, content_type, file_size,
+			   storage_path, thumbnail_path, width, height, uploaded_at,
+			   metadata, created_at, updated_at
+		FROM images WHERE id = $1
+	`
+
+	return r.scanSingleImage(ctx, query, fmt.Sprintf("image with ID %d not found", id), id)
 }
 
 // GetByFilename retrieves an image by its filename
@@ -92,28 +97,7 @@ func (r *imageRepository) GetByFilename(ctx context.Context, filename string) (*
 		FROM images WHERE filename = $1
 	`
 
-	image := &Image{}
-	err := r.db.QueryRowContext(ctx, query, filename).Scan(
-		&image.ID,
-		&image.Filename,
-		&image.OriginalFilename,
-		&image.ContentType,
-		&image.FileSize,
-		&image.StoragePath,
-		&image.ThumbnailPath,
-		&image.Width,
-		&image.Height,
-		&image.UploadedAt,
-		&image.Metadata,
-		&image.CreatedAt,
-		&image.UpdatedAt,
-	)
-
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("image with filename %s not found", filename)
-	}
-
-	return image, err
+	return r.scanSingleImage(ctx, query, fmt.Sprintf("image with filename %s not found", filename), filename)
 }
 
 // GetByStoragePath retrieves an image by its storage path
@@ -125,28 +109,7 @@ func (r *imageRepository) GetByStoragePath(ctx context.Context, path string) (*I
 		FROM images WHERE storage_path = $1
 	`
 
-	image := &Image{}
-	err := r.db.QueryRowContext(ctx, query, path).Scan(
-		&image.ID,
-		&image.Filename,
-		&image.OriginalFilename,
-		&image.ContentType,
-		&image.FileSize,
-		&image.StoragePath,
-		&image.ThumbnailPath,
-		&image.Width,
-		&image.Height,
-		&image.UploadedAt,
-		&image.Metadata,
-		&image.CreatedAt,
-		&image.UpdatedAt,
-	)
-
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("image with storage path %s not found", path)
-	}
-
-	return image, err
+	return r.scanSingleImage(ctx, query, fmt.Sprintf("image with storage path %s not found", path), path)
 }
 
 // Update updates an existing image record
@@ -187,7 +150,7 @@ func (r *imageRepository) Update(ctx context.Context, image *Image) error {
 // UpdateThumbnail updates just the thumbnail path for an image
 func (r *imageRepository) UpdateThumbnail(ctx context.Context, id int, thumbnailPath string) error {
 	query := `UPDATE images SET thumbnail_path = $2, updated_at = NOW() WHERE id = $1`
-	
+
 	result, err := r.db.ExecContext(ctx, query, id, thumbnailPath)
 	if err != nil {
 		return err
@@ -208,7 +171,7 @@ func (r *imageRepository) UpdateThumbnail(ctx context.Context, id int, thumbnail
 // Delete removes an image record by ID
 func (r *imageRepository) Delete(ctx context.Context, id int) error {
 	query := `DELETE FROM images WHERE id = $1`
-	
+
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
@@ -229,7 +192,7 @@ func (r *imageRepository) Delete(ctx context.Context, id int) error {
 // DeleteByStoragePath removes an image record by storage path
 func (r *imageRepository) DeleteByStoragePath(ctx context.Context, path string) error {
 	query := `DELETE FROM images WHERE storage_path = $1`
-	
+
 	result, err := r.db.ExecContext(ctx, query, path)
 	if err != nil {
 		return err
@@ -250,15 +213,18 @@ func (r *imageRepository) DeleteByStoragePath(ctx context.Context, path string) 
 // List retrieves a paginated list of images
 func (r *imageRepository) List(ctx context.Context, pagination PaginationParams, sort SortParams) ([]*Image, error) {
 	pagination.Validate()
-	
-	query := fmt.Sprintf(`
+
+	// Validate and build ORDER BY clause safely
+	orderBy := buildSimpleOrderByClause(sort)
+
+	query := `
 		SELECT id, filename, original_filename, content_type, file_size,
 			   storage_path, thumbnail_path, width, height, uploaded_at,
 			   metadata, created_at, updated_at
 		FROM images
-		ORDER BY %s %s
+		ORDER BY ` + orderBy + `
 		LIMIT $1 OFFSET $2
-	`, sort.Field, sort.Order)
+	`
 
 	return r.scanImages(ctx, query, pagination.Limit, pagination.Offset)
 }
@@ -266,7 +232,7 @@ func (r *imageRepository) List(ctx context.Context, pagination PaginationParams,
 // ListByContentType retrieves images filtered by content type
 func (r *imageRepository) ListByContentType(ctx context.Context, contentType string, pagination PaginationParams) ([]*Image, error) {
 	pagination.Validate()
-	
+
 	query := `
 		SELECT id, filename, original_filename, content_type, file_size,
 			   storage_path, thumbnail_path, width, height, uploaded_at,
@@ -283,7 +249,7 @@ func (r *imageRepository) ListByContentType(ctx context.Context, contentType str
 // Search performs complex filtering and searching
 func (r *imageRepository) Search(ctx context.Context, filters SearchFilters, pagination PaginationParams, sort SortParams) ([]*Image, error) {
 	pagination.Validate()
-	
+
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
@@ -334,15 +300,18 @@ func (r *imageRepository) Search(ctx context.Context, filters SearchFilters, pag
 		whereClause = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
+	// Validate and build ORDER BY clause safely
+	orderBy := buildSimpleOrderByClause(sort)
+
 	query := fmt.Sprintf(`
 		SELECT id, filename, original_filename, content_type, file_size,
 			   storage_path, thumbnail_path, width, height, uploaded_at,
 			   metadata, created_at, updated_at
 		FROM images
 		%s
-		ORDER BY %s %s
+		ORDER BY %s
 		LIMIT $%d OFFSET $%d
-	`, whereClause, sort.Field, sort.Order, argIndex, argIndex+1)
+	`, whereClause, orderBy, argIndex, argIndex+1)
 
 	args = append(args, pagination.Limit, pagination.Offset)
 
@@ -352,7 +321,7 @@ func (r *imageRepository) Search(ctx context.Context, filters SearchFilters, pag
 // GetByDateRange retrieves images within a date range
 func (r *imageRepository) GetByDateRange(ctx context.Context, start, end time.Time, pagination PaginationParams) ([]*Image, error) {
 	pagination.Validate()
-	
+
 	query := `
 		SELECT id, filename, original_filename, content_type, file_size,
 			   storage_path, thumbnail_path, width, height, uploaded_at,
@@ -371,7 +340,7 @@ func (r *imageRepository) GetRecent(ctx context.Context, since time.Time, limit 
 	if limit <= 0 || limit > 1000 {
 		limit = 50
 	}
-	
+
 	query := `
 		SELECT id, filename, original_filename, content_type, file_size,
 			   storage_path, thumbnail_path, width, height, uploaded_at,
@@ -388,7 +357,7 @@ func (r *imageRepository) GetRecent(ctx context.Context, since time.Time, limit 
 // GetLargest retrieves images ordered by file size
 func (r *imageRepository) GetLargest(ctx context.Context, pagination PaginationParams) ([]*Image, error) {
 	pagination.Validate()
-	
+
 	query := `
 		SELECT id, filename, original_filename, content_type, file_size,
 			   storage_path, thumbnail_path, width, height, uploaded_at,
@@ -441,42 +410,46 @@ func (r *imageRepository) GetStats(ctx context.Context) (*ImageStats, error) {
 	return stats, err
 }
 
+// selectGetWithTagsQuery selects the appropriate query based on sort parameters
+func (r *imageRepository) selectGetWithTagsQuery(sort SortParams) string {
+	switch sort.Field {
+	case SortByUploadedAt:
+		if sort.Order == SortAsc {
+			return getWithTagsQueryUploadedAtAsc
+		}
+		return getWithTagsQueryUploadedAtDesc
+	case SortByFilename:
+		if sort.Order == SortAsc {
+			return getWithTagsQueryFilenameAsc
+		}
+		return getWithTagsQueryFilenameDesc
+	case SortByFileSize:
+		if sort.Order == SortAsc {
+			return getWithTagsQueryFileSizeAsc
+		}
+		return getWithTagsQueryFileSizeDesc
+	case SortByCreatedAt:
+		if sort.Order == SortAsc {
+			return getWithTagsQueryCreatedAtAsc
+		}
+		return getWithTagsQueryCreatedAtDesc
+	default:
+		// Default to uploaded_at DESC
+		return getWithTagsQueryUploadedAtDesc
+	}
+}
+
 // GetWithTags retrieves images with their associated tags
 func (r *imageRepository) GetWithTags(ctx context.Context, pagination PaginationParams, sort SortParams) ([]*Image, error) {
 	pagination.Validate()
-	
-	query := fmt.Sprintf(`
-		SELECT 
-			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
-			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
-			i.metadata, i.created_at, i.updated_at,
-			COALESCE(
-				json_agg(
-					json_build_object(
-						'id', t.id, 
-						'name', t.name, 
-						'description', t.description,
-						'color', t.color,
-						'created_at', t.created_at
-					) ORDER BY t.name
-				) FILTER (WHERE t.id IS NOT NULL), 
-				'[]'
-			) as tags
-		FROM images i
-		LEFT JOIN image_tags it ON i.id = it.image_id
-		LEFT JOIN tags t ON it.tag_id = t.id
-		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size, 
-				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at, 
-				 i.metadata, i.created_at, i.updated_at
-		ORDER BY i.%s %s
-		LIMIT $1 OFFSET $2
-	`, sort.Field, sort.Order)
+
+	query := r.selectGetWithTagsQuery(sort)
 
 	rows, err := r.db.QueryContext(ctx, query, pagination.Limit, pagination.Offset)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
 
 	var images []*Image
 	for rows.Next() {
@@ -522,7 +495,7 @@ func (r *imageRepository) GetByTags(ctx context.Context, tags []string, matchAll
 	if len(tags) == 0 {
 		return []*Image{}, nil
 	}
-	
+
 	pagination.Validate()
 
 	var query string
@@ -570,7 +543,7 @@ func (r *imageRepository) scanImages(ctx context.Context, query string, args ...
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
 
 	var images []*Image
 	for rows.Next() {
@@ -598,3 +571,247 @@ func (r *imageRepository) scanImages(ctx context.Context, query string, args ...
 
 	return images, rows.Err()
 }
+
+// buildSimpleOrderByClause safely constructs the ORDER BY clause for simple queries (without table alias)
+func buildSimpleOrderByClause(sort SortParams) string {
+	// Validate and whitelist sort field
+	var field string
+	switch sort.Field {
+	case SortByUploadedAt:
+		field = string(SortByUploadedAt)
+	case SortByFilename:
+		field = string(SortByFilename)
+	case SortByFileSize:
+		field = string(SortByFileSize)
+	case SortByCreatedAt:
+		field = string(SortByCreatedAt)
+	default:
+		// Default to uploaded_at if invalid
+		field = string(SortByUploadedAt)
+	}
+
+	// Validate and whitelist sort order
+	var order string
+	switch sort.Order {
+	case SortAsc:
+		order = string(SortAsc)
+	case SortDesc:
+		order = string(SortDesc)
+	default:
+		// Default to DESC if invalid
+		order = string(SortDesc)
+	}
+
+	return field + " " + order
+}
+
+// Predefined queries to avoid SQL injection with dynamic ORDER BY clauses
+const (
+	getWithTagsQueryUploadedAtAsc = `
+		SELECT
+			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+			i.metadata, i.created_at, i.updated_at,
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description,
+						'color', t.color,
+						'created_at', t.created_at
+					) ORDER BY t.name
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as tags
+		FROM images i
+		LEFT JOIN image_tags it ON i.id = it.image_id
+		LEFT JOIN tags t ON it.tag_id = t.id
+		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+				 i.metadata, i.created_at, i.updated_at
+		ORDER BY i.uploaded_at ASC
+		LIMIT $1 OFFSET $2`
+
+	getWithTagsQueryUploadedAtDesc = `
+		SELECT
+			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+			i.metadata, i.created_at, i.updated_at,
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description,
+						'color', t.color,
+						'created_at', t.created_at
+					) ORDER BY t.name
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as tags
+		FROM images i
+		LEFT JOIN image_tags it ON i.id = it.image_id
+		LEFT JOIN tags t ON it.tag_id = t.id
+		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+				 i.metadata, i.created_at, i.updated_at
+		ORDER BY i.uploaded_at DESC
+		LIMIT $1 OFFSET $2`
+
+	getWithTagsQueryFilenameAsc = `
+		SELECT
+			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+			i.metadata, i.created_at, i.updated_at,
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description,
+						'color', t.color,
+						'created_at', t.created_at
+					) ORDER BY t.name
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as tags
+		FROM images i
+		LEFT JOIN image_tags it ON i.id = it.image_id
+		LEFT JOIN tags t ON it.tag_id = t.id
+		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+				 i.metadata, i.created_at, i.updated_at
+		ORDER BY i.filename ASC
+		LIMIT $1 OFFSET $2`
+
+	getWithTagsQueryFilenameDesc = `
+		SELECT
+			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+			i.metadata, i.created_at, i.updated_at,
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description,
+						'color', t.color,
+						'created_at', t.created_at
+					) ORDER BY t.name
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as tags
+		FROM images i
+		LEFT JOIN image_tags it ON i.id = it.image_id
+		LEFT JOIN tags t ON it.tag_id = t.id
+		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+				 i.metadata, i.created_at, i.updated_at
+		ORDER BY i.filename DESC
+		LIMIT $1 OFFSET $2`
+
+	getWithTagsQueryFileSizeAsc = `
+		SELECT
+			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+			i.metadata, i.created_at, i.updated_at,
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description,
+						'color', t.color,
+						'created_at', t.created_at
+					) ORDER BY t.name
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as tags
+		FROM images i
+		LEFT JOIN image_tags it ON i.id = it.image_id
+		LEFT JOIN tags t ON it.tag_id = t.id
+		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+				 i.metadata, i.created_at, i.updated_at
+		ORDER BY i.file_size ASC
+		LIMIT $1 OFFSET $2`
+
+	getWithTagsQueryFileSizeDesc = `
+		SELECT
+			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+			i.metadata, i.created_at, i.updated_at,
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description,
+						'color', t.color,
+						'created_at', t.created_at
+					) ORDER BY t.name
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as tags
+		FROM images i
+		LEFT JOIN image_tags it ON i.id = it.image_id
+		LEFT JOIN tags t ON it.tag_id = t.id
+		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+				 i.metadata, i.created_at, i.updated_at
+		ORDER BY i.file_size DESC
+		LIMIT $1 OFFSET $2`
+
+	getWithTagsQueryCreatedAtAsc = `
+		SELECT
+			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+			i.metadata, i.created_at, i.updated_at,
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description,
+						'color', t.color,
+						'created_at', t.created_at
+					) ORDER BY t.name
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as tags
+		FROM images i
+		LEFT JOIN image_tags it ON i.id = it.image_id
+		LEFT JOIN tags t ON it.tag_id = t.id
+		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+				 i.metadata, i.created_at, i.updated_at
+		ORDER BY i.created_at ASC
+		LIMIT $1 OFFSET $2`
+
+	getWithTagsQueryCreatedAtDesc = `
+		SELECT
+			i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+			i.metadata, i.created_at, i.updated_at,
+			COALESCE(
+				json_agg(
+					json_build_object(
+						'id', t.id,
+						'name', t.name,
+						'description', t.description,
+						'color', t.color,
+						'created_at', t.created_at
+					) ORDER BY t.name
+				) FILTER (WHERE t.id IS NOT NULL),
+				'[]'
+			) as tags
+		FROM images i
+		LEFT JOIN image_tags it ON i.id = it.image_id
+		LEFT JOIN tags t ON it.tag_id = t.id
+		GROUP BY i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+				 i.storage_path, i.thumbnail_path, i.width, i.height, i.uploaded_at,
+				 i.metadata, i.created_at, i.updated_at
+		ORDER BY i.created_at DESC
+		LIMIT $1 OFFSET $2`
+)

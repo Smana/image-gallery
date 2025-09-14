@@ -20,7 +20,7 @@ func TestNewCacheService(t *testing.T) {
 
 	// Test with real client (if Redis is available)
 	if client := getTestRedisClient(t); client != nil {
-		defer client.Close()
+		defer func() { _ = client.Close() }() //nolint:errcheck // Resource cleanup
 		service = NewCacheService(client)
 		assert.NotNil(t, service)
 	}
@@ -93,7 +93,7 @@ func TestCacheService_WithRedisClient(t *testing.T) {
 		t.Skip("Redis not available for testing")
 		return
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() //nolint:errcheck // Resource cleanup
 
 	service := NewCacheService(client)
 	ctx := context.Background()

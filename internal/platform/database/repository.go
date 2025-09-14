@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
@@ -106,4 +107,35 @@ func NewRepositories(imageRepo ImageRepository, tagRepo TagRepository, albumRepo
 		Tags:   tagRepo,
 		Albums: albumRepo,
 	}
+}
+
+// scanImages is a shared helper function to scan multiple image records from database rows
+func scanImages(ctx context.Context, rows *sql.Rows) ([]*Image, error) {
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
+
+	var images []*Image
+	for rows.Next() {
+		image := &Image{}
+		err := rows.Scan(
+			&image.ID,
+			&image.Filename,
+			&image.OriginalFilename,
+			&image.ContentType,
+			&image.FileSize,
+			&image.StoragePath,
+			&image.ThumbnailPath,
+			&image.Width,
+			&image.Height,
+			&image.UploadedAt,
+			&image.Metadata,
+			&image.CreatedAt,
+			&image.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		images = append(images, image)
+	}
+
+	return images, rows.Err()
 }

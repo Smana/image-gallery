@@ -95,24 +95,24 @@ func (m *Metadata) Scan(value interface{}) error {
 
 // ImageStats represents aggregate statistics about images
 type ImageStats struct {
-	TotalImages   int     `json:"total_images" db:"total_images"`
-	ContentTypes  int     `json:"content_types" db:"content_types"`
-	TotalSize     int64   `json:"total_size" db:"total_size"`
-	AverageSize   float64 `json:"average_size" db:"avg_size"`
-	MaxSize       int64   `json:"max_size" db:"max_size"`
-	MinSize       int64   `json:"min_size" db:"min_size"`
+	TotalImages  int     `json:"total_images" db:"total_images"`
+	ContentTypes int     `json:"content_types" db:"content_types"`
+	TotalSize    int64   `json:"total_size" db:"total_size"`
+	AverageSize  float64 `json:"average_size" db:"avg_size"`
+	MaxSize      int64   `json:"max_size" db:"max_size"`
+	MinSize      int64   `json:"min_size" db:"min_size"`
 }
 
 // SearchFilters represents filters for image searches
 type SearchFilters struct {
-	ContentTypes []string  `json:"content_types,omitempty"`
-	Tags         []string  `json:"tags,omitempty"`
-	Albums       []int     `json:"albums,omitempty"`
-	MinSize      *int64    `json:"min_size,omitempty"`
-	MaxSize      *int64    `json:"max_size,omitempty"`
+	ContentTypes []string   `json:"content_types,omitempty"`
+	Tags         []string   `json:"tags,omitempty"`
+	Albums       []int      `json:"albums,omitempty"`
+	MinSize      *int64     `json:"min_size,omitempty"`
+	MaxSize      *int64     `json:"max_size,omitempty"`
 	StartDate    *time.Time `json:"start_date,omitempty"`
 	EndDate      *time.Time `json:"end_date,omitempty"`
-	Filename     string    `json:"filename,omitempty"`
+	Filename     string     `json:"filename,omitempty"`
 }
 
 // PaginationParams represents pagination parameters

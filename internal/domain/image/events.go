@@ -10,22 +10,22 @@ type EventType string
 
 const (
 	// Image events
-	EventImageCreated   EventType = "image.created"
-	EventImageUpdated   EventType = "image.updated"
-	EventImageDeleted   EventType = "image.deleted"
-	EventImageViewed    EventType = "image.viewed"
+	EventImageCreated    EventType = "image.created"
+	EventImageUpdated    EventType = "image.updated"
+	EventImageDeleted    EventType = "image.deleted"
+	EventImageViewed     EventType = "image.viewed"
 	EventImageDownloaded EventType = "image.downloaded"
 
 	// Tag events
-	EventTagCreated EventType = "tag.created"
-	EventTagDeleted EventType = "tag.deleted"
+	EventTagCreated  EventType = "tag.created"
+	EventTagDeleted  EventType = "tag.deleted"
 	EventTagAttached EventType = "tag.attached"
 	EventTagDetached EventType = "tag.detached"
 
 	// System events
-	EventStorageQuotaReached EventType = "storage.quota_reached"
+	EventStorageQuotaReached   EventType = "storage.quota_reached"
 	EventImageProcessingFailed EventType = "image.processing_failed"
-	EventThumbnailGenerated EventType = "image.thumbnail_generated"
+	EventThumbnailGenerated    EventType = "image.thumbnail_generated"
 )
 
 // DomainEvent represents a domain event in the image gallery system
@@ -89,11 +89,11 @@ type ImageViewedEvent struct {
 
 // ImageDownloadedEvent is published when an image is downloaded
 type ImageDownloadedEvent struct {
-	ImageID      int    `json:"image_id"`
-	Filename     string `json:"filename"`
-	UserID       string `json:"user_id,omitempty"`
-	IPAddress    string `json:"ip_address,omitempty"`
-	DownloadSize int64  `json:"download_size"`
+	ImageID      int       `json:"image_id"`
+	Filename     string    `json:"filename"`
+	UserID       string    `json:"user_id,omitempty"`
+	IPAddress    string    `json:"ip_address,omitempty"`
+	DownloadSize int64     `json:"download_size"`
 	Timestamp    time.Time `json:"timestamp"`
 }
 
@@ -107,21 +107,21 @@ type TagCreatedEvent struct {
 
 // TagDeletedEvent is published when a tag is deleted
 type TagDeletedEvent struct {
-	TagID     int       `json:"tag_id"`
-	Name      string    `json:"name"`
-	DeletedBy string    `json:"deleted_by"`
-	Reason    string    `json:"reason,omitempty"`
-	ImageCount int      `json:"image_count"` // Number of images that had this tag
-	Timestamp time.Time `json:"timestamp"`
+	TagID      int       `json:"tag_id"`
+	Name       string    `json:"name"`
+	DeletedBy  string    `json:"deleted_by"`
+	Reason     string    `json:"reason,omitempty"`
+	ImageCount int       `json:"image_count"` // Number of images that had this tag
+	Timestamp  time.Time `json:"timestamp"`
 }
 
 // TagAttachedEvent is published when a tag is attached to an image
 type TagAttachedEvent struct {
-	ImageID   int       `json:"image_id"`
-	TagID     int       `json:"tag_id"`
-	TagName   string    `json:"tag_name"`
-	AttachedBy string   `json:"attached_by"`
-	Timestamp time.Time `json:"timestamp"`
+	ImageID    int       `json:"image_id"`
+	TagID      int       `json:"tag_id"`
+	TagName    string    `json:"tag_name"`
+	AttachedBy string    `json:"attached_by"`
+	Timestamp  time.Time `json:"timestamp"`
 }
 
 // TagDetachedEvent is published when a tag is detached from an image
@@ -154,13 +154,13 @@ type ImageProcessingFailedEvent struct {
 
 // ThumbnailGeneratedEvent is published when a thumbnail is successfully generated
 type ThumbnailGeneratedEvent struct {
-	ImageID       int       `json:"image_id"`
-	ThumbnailPath string    `json:"thumbnail_path"`
-	ThumbnailSize int64     `json:"thumbnail_size"`
-	Width         int       `json:"width"`
-	Height        int       `json:"height"`
-	ProcessingTime int64    `json:"processing_time_ms"`
-	Timestamp     time.Time `json:"timestamp"`
+	ImageID        int       `json:"image_id"`
+	ThumbnailPath  string    `json:"thumbnail_path"`
+	ThumbnailSize  int64     `json:"thumbnail_size"`
+	Width          int       `json:"width"`
+	Height         int       `json:"height"`
+	ProcessingTime int64     `json:"processing_time_ms"`
+	Timestamp      time.Time `json:"timestamp"`
 }
 
 // Event factory functions
@@ -174,7 +174,10 @@ func NewImageCreatedEvent(image *Image, userID string) *ImageCreatedEvent {
 
 	var metadata map[string]interface{}
 	if len(image.Metadata) > 0 {
-		json.Unmarshal(image.Metadata, &metadata)
+		if err := json.Unmarshal(image.Metadata, &metadata); err != nil {
+			// If metadata unmarshal fails, use nil - this is non-critical for events
+			metadata = nil
+		}
 	}
 
 	return &ImageCreatedEvent{
@@ -378,10 +381,10 @@ func (e *DomainEvent) FromJSON(data []byte) error {
 
 // IsValid checks if the event is valid
 func (e *DomainEvent) IsValid() bool {
-	return e.ID != "" && 
-		   e.Type != "" && 
-		   e.AggregateID != "" && 
-		   !e.Timestamp.IsZero()
+	return e.ID != "" &&
+		e.Type != "" &&
+		e.AggregateID != "" &&
+		!e.Timestamp.IsZero()
 }
 
 // GetAge returns the age of the event in seconds
@@ -413,11 +416,11 @@ func NewEventStream() *EventStream {
 func (es *EventStream) AddEvent(event DomainEvent) {
 	es.Events = append(es.Events, event)
 	es.Total = len(es.Events)
-	
+
 	if es.From.IsZero() || event.Timestamp.Before(es.From) {
 		es.From = event.Timestamp
 	}
-	
+
 	if es.To.IsZero() || event.Timestamp.After(es.To) {
 		es.To = event.Timestamp
 	}

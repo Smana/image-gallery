@@ -22,12 +22,12 @@ type Handler struct {
 	db      *sql.DB
 	storage *storage.MinIOClient
 	config  *config.Config
-	
+
 	// New service-based dependencies
-	container       *services.Container
-	imageService    image.ImageService
-	tagService      image.TagService
-	storageService  image.StorageService
+	container      *services.Container
+	imageService   image.ImageService
+	tagService     image.TagService
+	storageService image.StorageService
 }
 
 // New creates a handler with legacy dependencies (for backward compatibility)
@@ -46,7 +46,7 @@ func NewWithContainer(container *services.Container) *Handler {
 		db:      container.DB(),
 		storage: container.StorageClient(),
 		config:  container.Config(),
-		
+
 		// New service-based dependencies
 		container:      container,
 		imageService:   container.ImageService(),
@@ -92,15 +92,15 @@ func (h *Handler) indexHandler(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) viewImageHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	imagePath := chi.URLParam(r, "id")
-	
+
 	// Get image from storage
 	reader, err := h.storageService.Retrieve(ctx, imagePath)
 	if err != nil {
 		http.Error(w, "Image not found", http.StatusNotFound)
 		return
 	}
-	defer reader.Close()
-	
+	defer func() { _ = reader.Close() }() //nolint:errcheck // Resource cleanup
+
 	// Get file info for content type
 	fileInfo, err := h.storageService.GetFileInfo(ctx, imagePath)
 	if err == nil && fileInfo.ContentType != "" {
@@ -121,17 +121,20 @@ func (h *Handler) viewImageHandler(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/octet-stream")
 		}
 	}
-	
+
 	// Set cache headers
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	
+
 	// Copy image data to response
-	io.Copy(w, reader)
+	if _, err := io.Copy(w, reader); err != nil {
+		http.Error(w, "Failed to serve image", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (h *Handler) galleryHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(`
+	if _, err := w.Write([]byte(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -156,16 +159,16 @@ func (h *Handler) galleryHandler(w http.ResponseWriter, r *http.Request) {
 <body class="bg-gray-50">
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">Image Gallery</h1>
-        <div id="gallery" 
-             hx-get="/api/images" 
-             hx-trigger="load" 
-             hx-target="this" 
+        <div id="gallery"
+             hx-get="/api/images"
+             hx-trigger="load"
+             hx-target="this"
              hx-swap="innerHTML"
              class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             <div class="text-center text-gray-500">Loading images...</div>
         </div>
     </div>
-    
+
     <!-- Image viewer modal -->
     <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
         <div class="max-w-4xl max-h-full p-4">
@@ -177,7 +180,7 @@ func (h *Handler) galleryHandler(w http.ResponseWriter, r *http.Request) {
             </div>
         </div>
     </div>
-    
+
     <script>
         function openModal(imageUrl, imageName, imageSize) {
             document.getElementById('modalImage').src = imageUrl;
@@ -185,11 +188,11 @@ func (h *Handler) galleryHandler(w http.ResponseWriter, r *http.Request) {
             document.getElementById('modalImageSize').textContent = 'Size: ' + formatFileSize(imageSize);
             document.getElementById('imageModal').classList.remove('hidden');
         }
-        
+
         function closeModal() {
             document.getElementById('imageModal').classList.add('hidden');
         }
-        
+
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 Bytes';
             const k = 1024;
@@ -197,14 +200,14 @@ func (h *Handler) galleryHandler(w http.ResponseWriter, r *http.Request) {
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
-        
+
         // Close modal on escape key
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
                 closeModal();
             }
         });
-        
+
         // Close modal on click outside
         document.getElementById('imageModal').addEventListener('click', function(event) {
             if (event.target === this) {
@@ -214,6 +217,8 @@ func (h *Handler) galleryHandler(w http.ResponseWriter, r *http.Request) {
     </script>
 </body>
 </html>
-	`))
+	`)); err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
 }
-

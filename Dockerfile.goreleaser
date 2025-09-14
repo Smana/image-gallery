@@ -1,0 +1,26 @@
+# GoReleaser Dockerfile for optimized production image
+FROM gcr.io/distroless/static-debian12:nonroot
+
+# Install ca-certificates and timezone data in distroless
+# Note: These are already included in the distroless image
+
+# Copy the binary (GoReleaser will handle this automatically)
+COPY server /app/server
+
+# Copy web assets if they exist
+COPY web/ /app/web/
+
+WORKDIR /app
+
+# Expose port 8080
+EXPOSE 8080
+
+# Use non-root user (already configured in distroless:nonroot)
+USER nonroot:nonroot
+
+# Add healthcheck support (commented out as distroless doesn't include curl)
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+#     CMD curl -f http://localhost:8080/health || exit 1
+
+# Command to run the executable
+ENTRYPOINT ["/app/server"]

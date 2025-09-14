@@ -75,7 +75,7 @@ func TestNewImageProcessor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			processor := NewImageProcessor(tt.maxWidth, tt.maxHeight, tt.quality)
-			
+
 			assert.NotNil(t, processor)
 			assert.Equal(t, tt.expectWidth, processor.maxWidth)
 			assert.Equal(t, tt.expectHeight, processor.maxHeight)
@@ -173,10 +173,10 @@ func TestImageProcessor_GetImageInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name          string
-		data          io.Reader
-		expectError   bool
-		expectedWidth int
+		name           string
+		data           io.Reader
+		expectError    bool
+		expectedWidth  int
 		expectedHeight int
 		expectedFormat string
 	}{
@@ -199,7 +199,7 @@ func TestImageProcessor_GetImageInfo(t *testing.T) {
 			expectedFormat: "jpeg",
 		},
 		{
-			name:           "valid PNG", 
+			name:           "valid PNG",
 			data:           bytes.NewReader(pngBuf.Bytes()),
 			expectError:    false,
 			expectedWidth:  150,
@@ -218,7 +218,7 @@ func TestImageProcessor_GetImageInfo(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, info)
-				
+
 				if info != nil {
 					assert.Equal(t, tt.expectedWidth, info.Width)
 					assert.Equal(t, tt.expectedHeight, info.Height)
@@ -331,7 +331,7 @@ func TestImageProcessor_ValidateImage(t *testing.T) {
 
 	// Create oversized image for testing dimension limits
 	oversizedImg := image.NewRGBA(image.Rect(0, 0, 3000, 3000))
-	var oversizedBuf bytes.Buffer  
+	var oversizedBuf bytes.Buffer
 	err = jpeg.Encode(&oversizedBuf, oversizedImg, nil)
 	require.NoError(t, err)
 
@@ -491,13 +491,13 @@ func TestImageProcessor_CalculateOptimalThumbnailSize(t *testing.T) {
 	processor := NewImageProcessor(2000, 2000, 85)
 
 	tests := []struct {
-		name               string
-		srcWidth           int
-		srcHeight          int
-		maxWidth           int
-		maxHeight          int
-		expectedWidth      int
-		expectedHeight     int
+		name           string
+		srcWidth       int
+		srcHeight      int
+		maxWidth       int
+		maxHeight      int
+		expectedWidth  int
+		expectedHeight int
 	}{
 		{
 			name:           "landscape image fits within limits",
@@ -550,7 +550,7 @@ func TestImageProcessor_CalculateOptimalThumbnailSize(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			width, height := processor.CalculateOptimalThumbnailSize(
 				tt.srcWidth, tt.srcHeight, tt.maxWidth, tt.maxHeight)
-			
+
 			assert.Equal(t, tt.expectedWidth, width)
 			assert.Equal(t, tt.expectedHeight, height)
 		})
@@ -567,14 +567,22 @@ func TestImageProcessor_Integration(t *testing.T) {
 
 	// Create a larger test image
 	testImg := image.NewRGBA(image.Rect(0, 0, 400, 300))
-	
+
 	// Fill with some pattern for better testing
 	for y := 0; y < 300; y++ {
 		for x := 0; x < 400; x++ {
+			// Ensure values are safely within uint8 range (0-255)
+			rVal := x % 256
+			gVal := y % 256
+			bVal := (x + y) % 256
+
 			testImg.Set(x, y, color.RGBA{
-				R: uint8(x % 256),
-				G: uint8(y % 256), 
-				B: uint8((x + y) % 256),
+				// #nosec G115 -- Safe conversion: values are guaranteed to be 0-255
+				R: uint8(rVal), // Safe conversion: rVal is guaranteed to be 0-255
+				// #nosec G115 -- Safe conversion: values are guaranteed to be 0-255
+				G: uint8(gVal), // Safe conversion: gVal is guaranteed to be 0-255
+				// #nosec G115 -- Safe conversion: values are guaranteed to be 0-255
+				B: uint8(bVal), // Safe conversion: bVal is guaranteed to be 0-255
 				A: 255,
 			})
 		}
@@ -601,7 +609,7 @@ func TestImageProcessor_Integration(t *testing.T) {
 		// 3. Generate thumbnail
 		thumb, err := processor.GenerateThumbnail(ctx, bytes.NewReader(buf.Bytes()), 100, 75)
 		require.NoError(t, err)
-		
+
 		// Verify thumbnail dimensions
 		thumbConfig, _, err := image.DecodeConfig(thumb)
 		require.NoError(t, err)
@@ -611,7 +619,7 @@ func TestImageProcessor_Integration(t *testing.T) {
 		// 4. Resize image
 		resized, err := processor.Resize(ctx, bytes.NewReader(buf.Bytes()), 200, 150)
 		require.NoError(t, err)
-		
+
 		// Verify resized dimensions
 		resizedConfig, _, err := image.DecodeConfig(resized)
 		require.NoError(t, err)
@@ -621,7 +629,7 @@ func TestImageProcessor_Integration(t *testing.T) {
 		// 5. Optimize image
 		optimized, err := processor.OptimizeImage(ctx, bytes.NewReader(buf.Bytes()), 60)
 		require.NoError(t, err)
-		
+
 		// Verify optimized image is valid
 		_, _, err = image.DecodeConfig(optimized)
 		assert.NoError(t, err)

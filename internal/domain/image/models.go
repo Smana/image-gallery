@@ -69,34 +69,34 @@ type ListImagesResponse struct {
 
 // Domain errors
 var (
-	ErrInvalidImageData    = errors.New("invalid image data")
-	ErrInvalidContentType  = errors.New("invalid content type")
-	ErrInvalidFileSize     = errors.New("invalid file size")
-	ErrInvalidFilename     = errors.New("invalid filename")
-	ErrInvalidDimensions   = errors.New("invalid image dimensions")
-	ErrInvalidTagName      = errors.New("invalid tag name")
-	ErrInvalidPagination   = errors.New("invalid pagination parameters")
-	ErrImageNotFound       = errors.New("image not found")
-	ErrTagNotFound         = errors.New("tag not found")
-	ErrDuplicateTag        = errors.New("duplicate tag")
-	ErrCacheUnavailable    = errors.New("cache service unavailable")
+	ErrInvalidImageData   = errors.New("invalid image data")
+	ErrInvalidContentType = errors.New("invalid content type")
+	ErrInvalidFileSize    = errors.New("invalid file size")
+	ErrInvalidFilename    = errors.New("invalid filename")
+	ErrInvalidDimensions  = errors.New("invalid image dimensions")
+	ErrInvalidTagName     = errors.New("invalid tag name")
+	ErrInvalidPagination  = errors.New("invalid pagination parameters")
+	ErrImageNotFound      = errors.New("image not found")
+	ErrTagNotFound        = errors.New("tag not found")
+	ErrDuplicateTag       = errors.New("duplicate tag")
+	ErrCacheUnavailable   = errors.New("cache service unavailable")
 )
 
 // Constants for validation
 const (
-	MaxFileSize      = 50 * 1024 * 1024 // 50MB
-	MinFileSize      = 1                 // 1 byte
-	MaxFilenameLen   = 255
-	MaxTagNameLen    = 100
-	MinTagNameLen    = 1
-	MaxTagsPerImage  = 20
-	DefaultPageSize  = 20
-	MaxPageSize      = 100
-	MinPageSize      = 1
-	MaxImageWidth    = 50000
-	MaxImageHeight   = 50000
-	MinImageWidth    = 1
-	MinImageHeight   = 1
+	MaxFileSize     = 50 * 1024 * 1024 // 50MB
+	MinFileSize     = 1                // 1 byte
+	MaxFilenameLen  = 255
+	MaxTagNameLen   = 100
+	MinTagNameLen   = 1
+	MaxTagsPerImage = 20
+	DefaultPageSize = 20
+	MaxPageSize     = 100
+	MinPageSize     = 1
+	MaxImageWidth   = 50000
+	MaxImageHeight  = 50000
+	MinImageWidth   = 1
+	MinImageHeight  = 1
 )
 
 // Supported content types
@@ -181,7 +181,7 @@ func (i *Image) validateTags() error {
 	if len(i.Tags) > MaxTagsPerImage {
 		return fmt.Errorf("%w: too many tags (max %d)", ErrInvalidTagName, MaxTagsPerImage)
 	}
-	
+
 	seen := make(map[string]bool)
 	for _, tag := range i.Tags {
 		if err := tag.Validate(); err != nil {
@@ -242,22 +242,56 @@ func (i *Image) HasTag(tagName string) bool {
 
 // Validate validates the tag data
 func (t *Tag) Validate() error {
+	if err := t.validateTagName(); err != nil {
+		return err
+	}
+	if err := t.validateTagLength(); err != nil {
+		return err
+	}
+	if err := t.validateTagEncoding(); err != nil {
+		return err
+	}
+	return t.validateTagCharacters()
+}
+
+// validateTagName checks if tag name is empty
+func (t *Tag) validateTagName() error {
 	if t.Name == "" {
 		return fmt.Errorf("%w: tag name cannot be empty", ErrInvalidTagName)
 	}
+	return nil
+}
+
+// validateTagLength checks if tag name length is within limits
+func (t *Tag) validateTagLength() error {
 	if len(t.Name) < MinTagNameLen || len(t.Name) > MaxTagNameLen {
 		return fmt.Errorf("%w: tag name length must be between %d and %d characters", ErrInvalidTagName, MinTagNameLen, MaxTagNameLen)
 	}
+	return nil
+}
+
+// validateTagEncoding checks if tag name contains valid UTF-8
+func (t *Tag) validateTagEncoding() error {
 	if !utf8.ValidString(t.Name) {
 		return fmt.Errorf("%w: tag name contains invalid UTF-8", ErrInvalidTagName)
 	}
+	return nil
+}
+
+// validateTagCharacters checks if tag name contains only allowed characters
+func (t *Tag) validateTagCharacters() error {
 	// Tag names should be lowercase and contain only letters, numbers, and hyphens
 	for _, r := range t.Name {
-		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+		if !isValidTagCharacter(r) {
 			return fmt.Errorf("%w: tag name can only contain lowercase letters, numbers, and hyphens", ErrInvalidTagName)
 		}
 	}
 	return nil
+}
+
+// isValidTagCharacter checks if a rune is a valid tag character
+func isValidTagCharacter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-'
 }
 
 // NormalizeName normalizes the tag name (lowercase, trim spaces)
@@ -341,7 +375,7 @@ func (r *CreateImageRequest) validateTags() error {
 	if len(r.Tags) > MaxTagsPerImage {
 		return fmt.Errorf("%w: too many tags (max %d)", ErrInvalidTagName, MaxTagsPerImage)
 	}
-	
+
 	seen := make(map[string]bool)
 	for _, tagName := range r.Tags {
 		normalized := strings.TrimSpace(strings.ToLower(tagName))
@@ -463,7 +497,7 @@ func ValidateContentTypeFromExtension(contentType, filename string) error {
 		".gif":  {"image/gif"},
 		".webp": {"image/webp"},
 	}
-	
+
 	if expectedList, exists := expectedTypes[ext]; exists {
 		for _, expected := range expectedList {
 			if contentType == expected {
@@ -472,6 +506,6 @@ func ValidateContentTypeFromExtension(contentType, filename string) error {
 		}
 		return fmt.Errorf("%w: content type %s doesn't match extension %s", ErrInvalidContentType, contentType, ext)
 	}
-	
+
 	return fmt.Errorf("%w: unsupported file extension %s", ErrInvalidContentType, ext)
 }

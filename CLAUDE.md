@@ -136,4 +136,5 @@ The application gracefully degrades when Valkey is unavailable - caching errors 
 - The application follows strict TDD methodology with comprehensive test coverage
 - All new code requires corresponding tests
 - Use the dependency injection container for service resolution
-- Use Dagger for all CI steps when possible
+- Use Dagger for all CI steps when possible. These tests should also be ran locally using Dagger
+- Use atlas for database schema management

@@ -203,13 +203,13 @@ func TestImage_GetSizeCategory(t *testing.T) {
 		fileSize int64
 		expected string
 	}{
-		{"small file", 50*1024, "small"},          // 50KB
-		{"medium file", 500*1024, "medium"},       // 500KB
-		{"large file", 5*1024*1024, "large"},      // 5MB
-		{"xlarge file", 20*1024*1024, "xlarge"},   // 20MB
-		{"tiny file", 1, "small"},                 // 1 byte
-		{"boundary small", 100*1024-1, "small"},   // just under 100KB
-		{"boundary medium", 100*1024, "medium"},   // exactly 100KB
+		{"small file", 50 * 1024, "small"},          // 50KB
+		{"medium file", 500 * 1024, "medium"},       // 500KB
+		{"large file", 5 * 1024 * 1024, "large"},    // 5MB
+		{"xlarge file", 20 * 1024 * 1024, "xlarge"}, // 20MB
+		{"tiny file", 1, "small"},                   // 1 byte
+		{"boundary small", 100*1024 - 1, "small"},   // just under 100KB
+		{"boundary medium", 100 * 1024, "medium"},   // exactly 100KB
 	}
 
 	for _, tt := range tests {
@@ -472,7 +472,7 @@ func TestCreateImageRequest_GenerateFilename(t *testing.T) {
 	}
 
 	filename := request.GenerateFilename()
-	
+
 	assert.Contains(t, filename, "my_photo_")
 	assert.True(t, strings.HasSuffix(filename, ".jpg"))
 	assert.Greater(t, len(filename), len("my_photo_.jpg"))
@@ -636,9 +636,9 @@ func TestListImagesRequest_GetOffset(t *testing.T) {
 
 func TestListImagesResponse_CalculateTotalPages(t *testing.T) {
 	tests := []struct {
-		name         string
-		totalCount   int
-		pageSize     int
+		name          string
+		totalCount    int
+		pageSize      int
 		expectedPages int
 	}{
 		{"exact division", 100, 20, 5},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	minioClient "github.com/minio/minio-go/v7"
@@ -49,19 +50,19 @@ func SetupTestContainers(ctx context.Context) (*TestContainers, error) {
 
 	// Setup MinIO container
 	if err := containers.setupMinio(ctx); err != nil {
-		containers.Cleanup(ctx) // Clean up postgres if minio fails
+		_ = containers.Cleanup(ctx) //nolint:errcheck // Test cleanup on error
 		return nil, fmt.Errorf("failed to setup minio container: %w", err)
 	}
 
 	// Setup Redis container
 	if err := containers.setupRedis(ctx); err != nil {
-		containers.Cleanup(ctx) // Clean up other containers if redis fails
+		_ = containers.Cleanup(ctx) //nolint:errcheck // Test cleanup on error
 		return nil, fmt.Errorf("failed to setup redis container: %w", err)
 	}
 
 	// Run database migrations
 	if err := database.RunMigrations(containers.DB); err != nil {
-		containers.Cleanup(ctx)
+		_ = containers.Cleanup(ctx) //nolint:errcheck // Test cleanup on error
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
@@ -195,18 +196,24 @@ func (tc *TestContainers) setupRedis(ctx context.Context) error {
 
 	tc.RedisContainer = redisContainer
 
-	// Get connection string
+	// Get connection string and extract host:port
 	endpoint, err := redisContainer.ConnectionString(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get valkey endpoint: %w", err)
 	}
 
-	tc.RedisEndpoint = endpoint
+	// Remove redis:// prefix if present since go-redis expects just host:port
+	address := endpoint
+	if strings.HasPrefix(endpoint, "redis://") {
+		address = strings.TrimPrefix(endpoint, "redis://")
+	}
+
+	tc.RedisEndpoint = address
 
 	// Create Redis client using our cache implementation (Valkey is Redis-compatible)
 	cacheConfig := config.CacheConfig{
 		Enabled:     true,
-		Address:     endpoint,
+		Address:     address,
 		Password:    "",
 		Database:    0,
 		DefaultTTL:  1 * time.Hour,
@@ -232,40 +239,91 @@ func (tc *TestContainers) setupRedis(ctx context.Context) error {
 func (tc *TestContainers) Cleanup(ctx context.Context) error {
 	var errs []error
 
+	// Collect cleanup errors from all resources
+	tc.collectCleanupErrors(&errs)
+	tc.collectContainerTerminationErrors(ctx, &errs)
+
+	return tc.formatCleanupErrors(errs)
+}
+
+// collectCleanupErrors collects errors from closing client connections
+func (tc *TestContainers) collectCleanupErrors(errs *[]error) {
+	if err := tc.cleanupDatabase(); err != nil {
+		*errs = append(*errs, err)
+	}
+	if err := tc.cleanupRedisClient(); err != nil {
+		*errs = append(*errs, err)
+	}
+}
+
+// collectContainerTerminationErrors collects errors from terminating containers
+func (tc *TestContainers) collectContainerTerminationErrors(ctx context.Context, errs *[]error) {
+	if err := tc.terminatePostgresContainer(ctx); err != nil {
+		*errs = append(*errs, err)
+	}
+	if err := tc.terminateMinioContainer(ctx); err != nil {
+		*errs = append(*errs, err)
+	}
+	if err := tc.terminateRedisContainer(ctx); err != nil {
+		*errs = append(*errs, err)
+	}
+}
+
+// cleanupDatabase closes the database connection
+func (tc *TestContainers) cleanupDatabase() error {
 	if tc.DB != nil {
 		if err := tc.DB.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close database: %w", err))
+			return fmt.Errorf("failed to close database: %w", err)
 		}
 	}
+	return nil
+}
 
-	if tc.PostgresContainer != nil {
-		if err := tc.PostgresContainer.Terminate(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("failed to terminate postgres container: %w", err))
-		}
-	}
-
-	if tc.MinioContainer != nil {
-		if err := tc.MinioContainer.Terminate(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("failed to terminate minio container: %w", err))
-		}
-	}
-
+// cleanupRedisClient closes the Redis client connection
+func (tc *TestContainers) cleanupRedisClient() error {
 	if tc.RedisClient != nil {
 		if err := tc.RedisClient.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close valkey client: %w", err))
+			return fmt.Errorf("failed to close valkey client: %w", err)
 		}
 	}
+	return nil
+}
 
+// terminatePostgresContainer terminates the PostgreSQL container
+func (tc *TestContainers) terminatePostgresContainer(ctx context.Context) error {
+	if tc.PostgresContainer != nil {
+		if err := tc.PostgresContainer.Terminate(ctx); err != nil {
+			return fmt.Errorf("failed to terminate postgres container: %w", err)
+		}
+	}
+	return nil
+}
+
+// terminateMinioContainer terminates the MinIO container
+func (tc *TestContainers) terminateMinioContainer(ctx context.Context) error {
+	if tc.MinioContainer != nil {
+		if err := tc.MinioContainer.Terminate(ctx); err != nil {
+			return fmt.Errorf("failed to terminate minio container: %w", err)
+		}
+	}
+	return nil
+}
+
+// terminateRedisContainer terminates the Redis container
+func (tc *TestContainers) terminateRedisContainer(ctx context.Context) error {
 	if tc.RedisContainer != nil {
 		if err := tc.RedisContainer.Terminate(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("failed to terminate valkey container: %w", err))
+			return fmt.Errorf("failed to terminate valkey container: %w", err)
 		}
 	}
+	return nil
+}
 
+// formatCleanupErrors formats cleanup errors into a single error
+func (tc *TestContainers) formatCleanupErrors(errs []error) error {
 	if len(errs) > 0 {
 		return fmt.Errorf("cleanup errors: %v", errs)
 	}
-
 	return nil
 }
 
@@ -280,7 +338,7 @@ func (tc *TestContainers) GetMinioEndpoint() string {
 }
 
 // GetMinioCredentials returns MinIO credentials
-func (tc *TestContainers) GetMinioCredentials() (string, string) {
+func (tc *TestContainers) GetMinioCredentials() (username, password string) {
 	return tc.MinioUsername, tc.MinioPassword
 }
 
@@ -289,7 +347,7 @@ func (tc *TestContainers) ResetDatabase(ctx context.Context) error {
 	// Clean up all tables in reverse dependency order
 	tables := []string{
 		"image_albums",
-		"image_tags", 
+		"image_tags",
 		"albums",
 		"tags",
 		"images",
@@ -300,7 +358,7 @@ func (tc *TestContainers) ResetDatabase(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() //nolint:errcheck // Transaction cleanup
 
 	for _, table := range tables {
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s", table)); err != nil {
@@ -341,7 +399,7 @@ func (tc *TestContainers) FlushRedis(ctx context.Context) error {
 	if tc.RedisClient == nil {
 		return fmt.Errorf("valkey client not available")
 	}
-	
+
 	return tc.RedisClient.FlushCache(ctx)
 }
 

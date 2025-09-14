@@ -7,12 +7,13 @@ import (
 
 	"image-gallery/internal/domain/image"
 	"image-gallery/internal/platform/storage"
+
 	"github.com/minio/minio-go/v7"
 )
 
 // StorageServiceImpl implements the image.StorageService interface
 type StorageServiceImpl struct {
-	client *storage.MinIOClient
+	client  *storage.MinIOClient
 	service *storage.Service
 }
 
@@ -102,9 +103,9 @@ func (s *StorageServiceImpl) GetFileInfo(ctx context.Context, path string) (*ima
 	}
 	// Return minimal info for MinIOClient
 	return &image.FileInfo{
-		Path: path,
-		Size: 0,
-		ContentType: "application/octet-stream",
+		Path:         path,
+		Size:         0,
+		ContentType:  "application/octet-stream",
 		LastModified: time.Now().Unix(),
 	}, nil
 }
@@ -130,14 +131,14 @@ func (s *StorageServiceImpl) ListObjects(ctx context.Context, prefix string, max
 		}
 		return result, nil
 	}
-	
+
 	// Use MinIOClient to list objects directly
 	if s.client != nil {
 		objects, err := s.client.ListObjects(ctx, prefix, maxKeys)
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// Convert from storage.MinIOObjectInfo to local ObjectInfo
 		result := make([]ObjectInfo, len(objects))
 		for i, obj := range objects {
@@ -152,7 +153,7 @@ func (s *StorageServiceImpl) ListObjects(ctx context.Context, prefix string, max
 		}
 		return result, nil
 	}
-	
+
 	return []ObjectInfo{}, nil
 }
 

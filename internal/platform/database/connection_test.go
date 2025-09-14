@@ -45,7 +45,7 @@ func TestNewConnection(t *testing.T) {
 					assert.ErrorIs(t, err, tt.expectedError)
 				}
 				if db != nil {
-					db.Close()
+					_ = db.Close() //nolint:errcheck // Connection cleanup in test
 				}
 				return
 			}
@@ -57,7 +57,7 @@ func TestNewConnection(t *testing.T) {
 			err = db.Ping()
 			assert.NoError(t, err, "Database connection should be pingable")
 
-			db.Close()
+			_ = db.Close() //nolint:errcheck // Connection cleanup in test
 		})
 	}
 }
@@ -72,7 +72,7 @@ func TestNewConnectionWithRealDatabase(t *testing.T) {
 	db, err := NewConnection(testDBURL)
 	require.NoError(t, err, "Should connect to test database")
 	require.NotNil(t, db, "Database connection should not be nil")
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Connection cleanup in test
 
 	// Test connection is working
 	err = db.Ping()
@@ -90,7 +90,7 @@ func TestConnectionPooling(t *testing.T) {
 
 	db, err := NewConnection(testDBURL)
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }() //nolint:errcheck // Connection cleanup in test
 
 	// Configure connection pool for testing
 	db.SetMaxOpenConns(5)
@@ -122,7 +122,7 @@ func TestConnectionTimeout(t *testing.T) {
 	// Test connection with very short timeout
 	db, err := NewConnection("postgres://user:pass@192.0.2.0:5432/db?connect_timeout=1")
 	if err == nil {
-		db.Close()
+		_ = db.Close() //nolint:errcheck // Connection cleanup in test
 		t.Skip("Connection unexpectedly succeeded")
 	}
 
