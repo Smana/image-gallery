@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1](https://github.com/Smana/image-gallery/compare/v1.0.0...v1.0.1) (2025-09-14)
+
+
+### Bug Fixes
+
+* **ci:** gorelease workflow ([6bb2786](https://github.com/Smana/image-gallery/commit/6bb2786637785cb49ee4a0d7e778e2855a902202))
+* **ci:** gorelease workflow ([55ad87e](https://github.com/Smana/image-gallery/commit/55ad87e162018b7c71e08c50b984e0d62b2d7cd4))
+
 ## 1.0.0 (2025-09-14)
 
 
