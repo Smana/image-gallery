@@ -160,6 +160,4 @@ release:
 
     **Full Changelog**: https://github.com/{{ .Env.GITHUB_REPOSITORY }}/compare/{{ .PreviousTag }}...{{ .Tag }}
 
-# Disable SCM release (we handle this separately)
-scm:
-  disable: true
+# Note: SCM section removed as it's not supported in this version
