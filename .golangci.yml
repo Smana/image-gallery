@@ -48,6 +48,7 @@ linters-settings:
       - ifElseChain
       - paramTypeCombine
       - hugeParam
+      - exitAfterDefer
 
 issues:
   exclude-use-default: false

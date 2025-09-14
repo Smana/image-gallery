@@ -59,6 +59,12 @@ func (a *ImageRepositoryAdapter) GetByID(ctx context.Context, id int) (*image.Im
 		return nil, err
 	}
 
+	// Load tags for this image
+	// Note: We need access to tag repository, but adapter only has image repo
+	// For now, we'll load tags if the database image repository supports it
+	// TODO: This is a design issue - the adapter should have access to both repos
+	// or we should use a different approach
+
 	return a.convertToBaseImage(dbImage), nil
 }
 
@@ -229,6 +235,19 @@ func (a *ImageRepositoryAdapter) convertToBaseImage(dbImg *database.Image) *imag
 		if err == nil {
 			img.Metadata = metadataBytes
 		}
+	}
+
+	// Convert database tags to domain tags
+	if len(dbImg.Tags) > 0 {
+		domainTags := make([]image.Tag, len(dbImg.Tags))
+		for i, dbTag := range dbImg.Tags {
+			domainTags[i] = image.Tag{
+				ID:        dbTag.ID,
+				Name:      dbTag.Name,
+				CreatedAt: dbTag.CreatedAt,
+			}
+		}
+		img.Tags = domainTags
 	}
 
 	return img

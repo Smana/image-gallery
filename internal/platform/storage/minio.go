@@ -95,8 +95,6 @@ func (m *MinIOClient) ListObjects(ctx context.Context, prefix string, maxKeys in
 		maxKeys = 1000
 	}
 
-	fmt.Printf("DEBUG: MinIO ListObjects - bucket=%s, prefix=%s, maxKeys=%d\n", m.bucketName, prefix, maxKeys)
-
 	options := minio.ListObjectsOptions{
 		Prefix:    prefix,
 		MaxKeys:   maxKeys,
@@ -108,11 +106,8 @@ func (m *MinIOClient) ListObjects(ctx context.Context, prefix string, maxKeys in
 	objects := make([]MinIOObjectInfo, 0, maxKeys)
 	for object := range objectCh {
 		if object.Err != nil {
-			fmt.Printf("DEBUG: MinIO ListObjects error: %v\n", object.Err)
 			return nil, fmt.Errorf("error listing objects: %w", object.Err)
 		}
-
-		fmt.Printf("DEBUG: Found object: %s (size: %d, type: %s)\n", object.Key, object.Size, object.ContentType)
 
 		objects = append(objects, MinIOObjectInfo{
 			Key:          object.Key,
@@ -124,7 +119,6 @@ func (m *MinIOClient) ListObjects(ctx context.Context, prefix string, maxKeys in
 		})
 	}
 
-	fmt.Printf("DEBUG: Total objects found: %d\n", len(objects))
 	return objects, nil
 }
 

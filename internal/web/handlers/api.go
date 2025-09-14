@@ -38,14 +38,10 @@ func (h *Handler) getStorageImages() ([]ImageResponse, error) {
 		return nil, fmt.Errorf("storage service not available")
 	}
 
-	fmt.Printf("DEBUG: Calling ListObjects with prefix='' maxKeys=100\n")
 	objects, err := storageServiceImpl.ListObjects(ctx, "", 100)
 	if err != nil {
-		fmt.Printf("DEBUG: ListObjects error: %v\n", err)
 		return nil, fmt.Errorf("failed to list images: %v", err)
 	}
-
-	fmt.Printf("DEBUG: Found %d objects\n", len(objects))
 
 	return h.filterImageObjects(objects), nil
 }
@@ -54,12 +50,8 @@ func (h *Handler) getStorageImages() ([]ImageResponse, error) {
 func (h *Handler) filterImageObjects(objects []implementations.ObjectInfo) []ImageResponse {
 	images := make([]ImageResponse, 0)
 	for _, obj := range objects {
-		fmt.Printf("DEBUG: Checking object %s with content type: %s\n", obj.Key, obj.ContentType)
 		if isImageFile(obj.Key, obj.ContentType) {
-			fmt.Printf("DEBUG: Object %s passed content type filter\n", obj.Key)
 			url := fmt.Sprintf("/api/images/%s/view", obj.Key)
-
-			fmt.Printf("DEBUG: Adding image %s to results\n", obj.Key)
 			images = append(images, ImageResponse{
 				ID:         obj.Key,
 				Name:       extractOriginalFilename(obj.UserMetadata, obj.Key),
@@ -67,8 +59,6 @@ func (h *Handler) filterImageObjects(objects []implementations.ObjectInfo) []Ima
 				Size:       obj.Size,
 				UploadTime: obj.LastModified.Format("2006-01-02 15:04:05"),
 			})
-		} else {
-			fmt.Printf("DEBUG: Object %s rejected - unsupported content type: %s\n", obj.Key, obj.ContentType)
 		}
 	}
 	return images

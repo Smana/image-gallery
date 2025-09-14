@@ -23,6 +23,12 @@ graph TB
     end
 ```
 
+### Infrastructure Components
+
+- **PostgreSQL Database**: Primary data store for image metadata, tags, and albums
+- **S3 Storage (MinIO/AWS)**: Object storage for actual image files and binary data
+- **Valkey Cache**: Performance optimization layer with graceful degradation
+
 ## 🚀 Quick Start
 
 ```bash
