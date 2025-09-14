@@ -45,8 +45,8 @@ archives:
 dockers:
   - id: image-gallery-amd64
     image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}-amd64"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest-amd64"
+      - "ghcr.io/smana/image-gallery:{{ .Version }}-amd64"
+      - "ghcr.io/smana/image-gallery:latest-amd64"
     dockerfile: Dockerfile.goreleaser
     use: buildx
     build_flag_templates:
@@ -62,8 +62,8 @@ dockers:
 
   - id: image-gallery-arm64
     image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}-arm64"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest-arm64"
+      - "ghcr.io/smana/image-gallery:{{ .Version }}-arm64"
+      - "ghcr.io/smana/image-gallery:latest-arm64"
     dockerfile: Dockerfile.goreleaser
     use: buildx
     build_flag_templates:
@@ -78,14 +78,14 @@ dockers:
       - --label=org.opencontainers.image.licenses=MIT
 
 docker_manifests:
-  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}"
+  - name_template: "ghcr.io/smana/image-gallery:{{ .Version }}"
     image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}-amd64"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest"
+      - "ghcr.io/smana/image-gallery:{{ .Version }}-amd64"
+      - "ghcr.io/smana/image-gallery:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/smana/image-gallery:latest"
     image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest-amd64"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest-arm64"
+      - "ghcr.io/smana/image-gallery:latest-amd64"
+      - "ghcr.io/smana/image-gallery:latest-arm64"
 
 checksum:
   name_template: "checksums.txt"
@@ -135,10 +135,10 @@ release:
     #### Container Images
     ```bash
     # Pull the latest release
-    docker pull ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}
+    docker pull ghcr.io/smana/image-gallery:{{ .Version }}
 
     # Run the application
-    docker run -p 8080:8080 ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}
+    docker run -p 8080:8080 ghcr.io/smana/image-gallery:{{ .Version }}
     ```
 
     #### Verify Checksums
