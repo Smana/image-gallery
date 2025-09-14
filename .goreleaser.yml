@@ -31,7 +31,7 @@ archives:
   - id: image-gallery
     builds:
       - image-gallery
-    name_template: '{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}'
+    name_template: "{{ .ProjectName }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}"
     format: tar.gz
     format_overrides:
       - goos: windows
@@ -59,8 +59,6 @@ dockers:
       - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
       - --label=org.opencontainers.image.revision={{ .FullCommit }}
       - --label=org.opencontainers.image.licenses=MIT
-    extra_files:
-      - web/
 
   - id: image-gallery-arm64
     image_templates:
@@ -78,8 +76,6 @@ dockers:
       - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
       - --label=org.opencontainers.image.revision={{ .FullCommit }}
       - --label=org.opencontainers.image.licenses=MIT
-    extra_files:
-      - web/
 
 docker_manifests:
   - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Version }}"
@@ -92,7 +88,7 @@ docker_manifests:
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest-arm64"
 
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 
 snapshot:
   name_template: "{{ incpatch .Version }}-next"
@@ -111,7 +107,7 @@ changelog:
     - title: Features
       regexp: "^.*feat[(\\w)]*:+.*$"
       order: 0
-    - title: 'Bug fixes'
+    - title: "Bug fixes"
       regexp: "^.*fix[(\\w)]*:+.*$"
       order: 1
     - title: Others
