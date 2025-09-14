@@ -102,12 +102,14 @@ jobs:
         if: always()
         with:
           sarif_file: 'trivy-results-amd64.sarif'
+          category: 'trivy-amd64'
 
       - name: Upload Trivy scan results to GitHub Security (ARM64)
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results-arm64.sarif'
+          category: 'trivy-arm64'
 
 
       - name: Upload security scan results
