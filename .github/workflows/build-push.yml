@@ -68,18 +68,16 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build binaries and containers with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --snapshot --clean --skip=validate
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
           GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
           DOCKER_BUILDKIT: 1
-        run: |
-          # Install GoReleaser
-          curl -sfL https://goreleaser.com/static/run | bash -s -- --version
-          curl -sfL https://install.goreleaser.com/github.com/goreleaser/goreleaser.sh | sh
-
-          # Run GoReleaser release in snapshot mode (builds everything including Docker images)
-          ./bin/goreleaser release --snapshot --clean --skip=validate
 
       - name: Generate SBOM
         run: |
