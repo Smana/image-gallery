@@ -5,6 +5,21 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4](https://github.com/Smana/image-gallery/compare/v1.0.3...v1.0.4) (2025-09-14)
+
+
+### Bug Fixes
+
+* **ci:** add category in trivy steps ([faa7b08](https://github.com/Smana/image-gallery/commit/faa7b080ac4c0360e7649579e73524c92ebc6d8f))
+* **ci:** add category in trivy steps ([cdea3dd](https://github.com/Smana/image-gallery/commit/cdea3dd747e15d9826bbbb527d0b57be90f18645))
+* **ci:** integrate trivy with goreleaser ([33e9ce2](https://github.com/Smana/image-gallery/commit/33e9ce211485dfc380ec0e6526bd4b1e52edb079))
+* **ci:** integrate trivy with goreleaser ([418c430](https://github.com/Smana/image-gallery/commit/418c430654bb9aedb16b9439921f8599b33854b1))
+* **ci:** remove useless steps for building images ([248eabd](https://github.com/Smana/image-gallery/commit/248eabdc36e159b6754236103723d7808e01e080))
+* **ci:** replace dagger module with official action ([c07e7e7](https://github.com/Smana/image-gallery/commit/c07e7e71d3a0dc6a40d6770829241afc07e497d4))
+* **ci:** replace dagger module with official action ([bd3f834](https://github.com/Smana/image-gallery/commit/bd3f834ffb55a32eaf79bf2f3a837c5b06704147))
+* **ci:** use the same hash for both goreleaser and trivy ([7020267](https://github.com/Smana/image-gallery/commit/7020267264b6f62f3daae4176a25259117d435f7))
+* **ci:** use the same hash for both goreleaser and trivy ([3787b4e](https://github.com/Smana/image-gallery/commit/3787b4ed82200fce8f3483f2f45463176c072264))
+
 ## [1.0.3](https://github.com/Smana/image-gallery/compare/v1.0.2...v1.0.3) (2025-09-14)
 
 
