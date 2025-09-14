@@ -7,9 +7,6 @@ FROM gcr.io/distroless/static-debian12:nonroot
 # Copy the binary (GoReleaser will handle this automatically)
 COPY server /app/server
 
-# Copy web assets if they exist
-COPY web/ /app/web/
-
 WORKDIR /app
 
 # Expose port 8080
