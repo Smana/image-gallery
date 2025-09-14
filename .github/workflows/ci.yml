@@ -96,7 +96,7 @@ jobs:
             with-cgo-disabled
             build
             --source=.
-            --pkg=./server
+            --pkg=./cmd/server
             --ldflags="-w -s"
             export --path=./bin/${{ steps.platform.outputs.binary_name }}
 
