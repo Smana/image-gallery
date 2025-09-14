@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3](https://github.com/Smana/image-gallery/compare/v1.0.2...v1.0.3) (2025-09-14)
+
+
+### Bug Fixes
+
+* **ci:** docker image to lower ([446e88b](https://github.com/Smana/image-gallery/commit/446e88bdc3c3565ba65fd867f6aa52fd2d5934b9))
+* **ci:** docker image to lower ([52698d6](https://github.com/Smana/image-gallery/commit/52698d65f9f1f53c6f3f334a61ca659b34bb97f6))
+
 ## [1.0.2](https://github.com/Smana/image-gallery/compare/v1.0.1...v1.0.2) (2025-09-14)
 
 
