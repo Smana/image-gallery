@@ -101,12 +101,15 @@ jobs:
         with:
           version: "latest"
 
+      - name: Set commit short SHA
+        run: echo "COMMIT_SHORT=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
+
       - name: Run Trivy container security scan (SARIF)
         uses: dagger/dagger-for-github@v7
         with:
           version: "latest"
           module: "github.com/jpadams/daggerverse/trivy@v0.6.0"
-          call: "scan-image --image-ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --severity=HIGH,CRITICAL --format=sarif"
+          call: "scan-image --image-ref=ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }} --severity=HIGH,CRITICAL --format=sarif"
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
@@ -119,14 +122,14 @@ jobs:
         with:
           version: "latest"
           module: "github.com/jpadams/daggerverse/trivy@v0.6.0"
-          call: "scan-image --image-ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --severity=HIGH,CRITICAL --format=table"
+          call: "scan-image --image-ref=ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }} --severity=HIGH,CRITICAL --format=table"
 
       - name: Run Trivy container scan (JSON for artifact)
         uses: dagger/dagger-for-github@v7
         with:
           version: "latest"
           module: "github.com/jpadams/daggerverse/trivy@v0.6.0"
-          call: "scan-image --image-ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --severity=HIGH,CRITICAL --format=json"
+          call: "scan-image --image-ref=ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }} --severity=HIGH,CRITICAL --format=json"
 
       - name: Upload security scan results
         uses: actions/upload-artifact@v4
@@ -187,27 +190,3 @@ jobs:
           path: release-notes.md
           retention-days: 90
 
-  # Success notification
-  deploy-success:
-    name: Deployment Complete
-    runs-on: ubuntu-latest
-    needs: [goreleaser-build, security-scan]
-    if: always() && needs.goreleaser-build.result == 'success'
-    steps:
-      - name: Report deployment status
-        run: |
-          if [[ "${{ needs.security-scan.result }}" == "success" ]]; then
-            echo "🚀 Deployment completed successfully!"
-            echo "✅ Container image built and pushed"
-            echo "✅ Security scan completed"
-            echo ""
-            echo "📋 Deployment Summary:"
-            echo "  - Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-            echo "  - Latest: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-            echo "  - Platforms: linux/amd64, linux/arm64"
-            echo "  - Base: distroless/static-debian12:nonroot"
-          else
-            echo "⚠️ Deployment completed with warnings"
-            echo "✅ Container image built and pushed"
-            echo "⚠️ Security scan had issues (check logs)"
-          fi
