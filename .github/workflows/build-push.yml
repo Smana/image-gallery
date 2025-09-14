@@ -82,25 +82,48 @@ jobs:
       - name: Set commit short SHA for scanning
         run: echo "COMMIT_SHORT=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
 
-      - name: Run Trivy vulnerability scanner on built image
+      - name: Run Trivy vulnerability scanner on built image (AMD64)
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: 'ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }}'
+          image-ref: 'ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }}-amd64'
           format: 'sarif'
-          output: 'trivy-results.sarif'
+          output: 'trivy-results-amd64.sarif'
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
 
-      - name: Upload Trivy scan results to GitHub Security
+      - name: Run Trivy vulnerability scanner on built image (ARM64)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: 'ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }}-arm64'
+          format: 'sarif'
+          output: 'trivy-results-arm64.sarif'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+
+      - name: Upload Trivy scan results to GitHub Security (AMD64)
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: 'trivy-results-amd64.sarif'
 
-      - name: Run Trivy vulnerability scanner (table format for logs)
+      - name: Upload Trivy scan results to GitHub Security (ARM64)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results-arm64.sarif'
+
+      - name: Run Trivy vulnerability scanner (table format for logs - AMD64)
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: 'ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }}'
+          image-ref: 'ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }}-amd64'
+          format: 'table'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+
+      - name: Run Trivy vulnerability scanner (table format for logs - ARM64)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: 'ghcr.io/smana/image-gallery:${{ env.COMMIT_SHORT }}-arm64'
           format: 'table'
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
@@ -110,7 +133,9 @@ jobs:
         if: always()
         with:
           name: security-scan-results
-          path: trivy-results.sarif
+          path: |
+            trivy-results-amd64.sarif
+            trivy-results-arm64.sarif
           retention-days: 30
 
       - name: Generate SBOM
