@@ -25,11 +25,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make docker-up` - Start all services including the app
 - `make docker-down` - Stop all services
 
-### Database Management
-- `make migrate` - Run database migrations (uses Atlas if available, falls back to built-in)
+### Database Management (Atlas-Powered)
+- `make migrate` - Run database migrations via Atlas CLI
 - `make db-start` - Start only PostgreSQL service
 - `make db-reset` - Reset database with fresh schema
 - Atlas commands: `atlas-validate`, `atlas-inspect`, `atlas-diff`, `atlas-apply`
+
+#### Migration Strategy
+**Local Development:** Use `make migrate` (Atlas CLI directly)
+**Kubernetes:** Atlas Operator handles migrations automatically
+**Application:** Never runs migrations - Atlas handles all schema management
 
 ## Architecture Overview
 
@@ -132,12 +137,13 @@ The application gracefully degrades when Valkey is unavailable - caching errors 
 - Always run infrastructure services before running the application locally
 - For full functionality, start all services: `docker-compose up -d` (PostgreSQL, MinIO, Valkey)
 - For local development without Valkey: Set `CACHE_ENABLED=false` or start only: `docker-compose up -d postgres minio`
+- **Always use Atlas for migrations**: `make migrate` (local) or Atlas Operator (Kubernetes)
+- The application never runs migrations - it's purely application logic
 - Integration tests require Docker to be running and will start containers automatically
 - The application follows strict TDD methodology with comprehensive test coverage
 - All new code requires corresponding tests
 - Use the dependency injection container for service resolution
 - Use Dagger for all CI steps when possible. These tests should also be ran locally using Dagger
-- Use atlas for database schema management
 
 
 ### Testing GoReleaser Build and Push Workflow
