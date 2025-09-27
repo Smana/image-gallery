@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/Smana/image-gallery/compare/v1.0.5...v1.1.0) (2025-09-27)
+
+
+### Features
+
+* **atlas:** first configuration with atlas local env ([fb2e9f0](https://github.com/Smana/image-gallery/commit/fb2e9f0e86d419a97e2f0af9d71399d6ccc77aeb))
+* **atlas:** first configuration with atlas local env ([0324b9c](https://github.com/Smana/image-gallery/commit/0324b9cc6a2939dd3307a75f5869925636209268))
+
 ## [1.0.5](https://github.com/Smana/image-gallery/compare/v1.0.4...v1.0.5) (2025-09-14)
 
 
