@@ -40,13 +40,10 @@ func main() {
 		}
 	}()
 
-	if err := database.RunMigrations(db); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			log.Printf("Error closing database connection: %v", closeErr)
-		}
-		log.Printf("Failed to run migrations: %v", err)
-		os.Exit(1)
-	}
+	// Migrations are handled by Atlas - application never runs migrations:
+	// - Local development: Use `make migrate` (Atlas CLI)
+	// - Kubernetes: Atlas Operator handles migrations automatically
+	log.Println("Database connected - migrations are handled by Atlas")
 
 	storageClient, err := storage.NewMinIOClient(cfg.Storage)
 	if err != nil {

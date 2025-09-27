@@ -276,14 +276,16 @@ atlas-apply:
 	@echo "Applying schema changes..."
 	atlas schema apply --env local --auto-approve
 
-# Run database migrations
+# Run database migrations (Atlas only)
 migrate:
-	@echo "Running database migrations..."
+	@echo "Running database migrations with Atlas..."
 	@if command -v atlas > /dev/null; then \
 		atlas migrate apply --env local; \
 	else \
-		echo "Atlas not available, using built-in migration system"; \
-		echo "Database migrations will be run automatically on startup"; \
+		echo "❌ Atlas CLI not found. Please install it first:"; \
+		echo "   curl -sSf https://atlasgo.sh | sh"; \
+		echo "   Or run: make install-tools"; \
+		exit 1; \
 	fi
 
 # Database operations
@@ -330,8 +332,8 @@ help:
 	@echo "  docker-up       - Start services with Docker Compose"
 	@echo "  docker-down     - Stop services"
 	@echo ""
-	@echo "Database:"
-	@echo "  migrate         - Run database migrations"
+	@echo "Database (Atlas-powered):"
+	@echo "  migrate         - Run database migrations via Atlas CLI"
 	@echo "  atlas-validate  - Validate Atlas configuration"
 	@echo "  atlas-inspect   - Inspect current database schema"
 	@echo "  atlas-diff      - Generate schema diff"

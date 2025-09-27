@@ -16,12 +16,12 @@ CREATE TABLE IF NOT EXISTS images (
 );
 
 -- Create indexes for efficient queries
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_images_filename ON images(filename);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_images_original_filename ON images(original_filename);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_images_content_type ON images(content_type);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_images_uploaded_at ON images(uploaded_at DESC);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_images_file_size ON images(file_size DESC);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_images_storage_path ON images(storage_path);
+CREATE INDEX IF NOT EXISTS idx_images_filename ON images(filename);
+CREATE INDEX IF NOT EXISTS idx_images_original_filename ON images(original_filename);
+CREATE INDEX IF NOT EXISTS idx_images_content_type ON images(content_type);
+CREATE INDEX IF NOT EXISTS idx_images_uploaded_at ON images(uploaded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_images_file_size ON images(file_size DESC);
+CREATE INDEX IF NOT EXISTS idx_images_storage_path ON images(storage_path);
 
 -- Create tags table for image categorization
 CREATE TABLE IF NOT EXISTS tags (
@@ -33,8 +33,8 @@ CREATE TABLE IF NOT EXISTS tags (
 );
 
 -- Create index for tag searches
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tags_name ON tags(name);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tags_name_lower ON tags(LOWER(name));
+CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
+CREATE INDEX IF NOT EXISTS idx_tags_name_lower ON tags(LOWER(name));
 
 -- Create many-to-many relationship between images and tags
 CREATE TABLE IF NOT EXISTS image_tags (
@@ -45,8 +45,8 @@ CREATE TABLE IF NOT EXISTS image_tags (
 );
 
 -- Create indexes for efficient tag queries
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id);
+CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id);
 
 -- Create albums/collections table (optional enhancement)
 CREATE TABLE IF NOT EXISTS albums (
@@ -69,10 +69,10 @@ CREATE TABLE IF NOT EXISTS image_albums (
 );
 
 -- Create indexes for album queries
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_albums_name ON albums(name);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_albums_is_public ON albums(is_public);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_image_albums_album_id ON image_albums(album_id, position);
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_image_albums_image_id ON image_albums(image_id);
+CREATE INDEX IF NOT EXISTS idx_albums_name ON albums(name);
+CREATE INDEX IF NOT EXISTS idx_albums_is_public ON albums(is_public);
+CREATE INDEX IF NOT EXISTS idx_image_albums_album_id ON image_albums(album_id, position);
+CREATE INDEX IF NOT EXISTS idx_image_albums_image_id ON image_albums(image_id);
 
 -- Add updated_at trigger for images table
 CREATE OR REPLACE FUNCTION update_updated_at_column()

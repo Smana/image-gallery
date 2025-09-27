@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -29,11 +30,51 @@ func setupTestDatabase(t *testing.T) *sql.DB {
 	// Clean up any existing data
 	cleanupTables(t, db)
 
-	// Run migrations to set up schema
-	err = RunMigrations(db)
-	require.NoError(t, err, "Failed to run migrations")
+	// Apply migrations using Atlas CLI
+	err = applyMigrationsForTest(testDBURL)
+	require.NoError(t, err, "Failed to apply migrations with Atlas")
 
 	return db
+}
+
+// cleanupTables removes all data from tables for clean test state
+func cleanupTables(t *testing.T, db *sql.DB) {
+	tables := []string{"image_albums", "image_tags", "images", "albums", "tags"}
+
+	for _, table := range tables {
+		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s", table))
+		if err != nil {
+			t.Logf("Warning: Could not clean table %s: %v", table, err)
+		}
+	}
+}
+
+// applyMigrationsForTest applies schema migrations using Atlas CLI for integration tests
+func applyMigrationsForTest(databaseURL string) error {
+	// Set environment variable for Atlas test environment
+	originalEnv := os.Getenv("TEST_DATABASE_URL")
+	defer func() {
+		if originalEnv == "" {
+			os.Unsetenv("TEST_DATABASE_URL")
+		} else {
+			os.Setenv("TEST_DATABASE_URL", originalEnv)
+		}
+	}()
+
+	// Set the test database URL for Atlas
+	os.Setenv("TEST_DATABASE_URL", databaseURL)
+
+	// Use Atlas CLI to apply migrations from project root
+	cmd := exec.Command("atlas", "migrate", "apply", "--env", "test", "--config", "file://atlas.hcl")
+	cmd.Dir = "../../../" // Change to project root where atlas.hcl is located
+
+	// Capture output for debugging
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("atlas migrate apply failed: %w\nOutput: %s", err, output)
+	}
+
+	return nil
 }
 
 func intPtr(i int) *int {

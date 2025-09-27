@@ -4,6 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -17,7 +21,6 @@ import (
 
 	"image-gallery/internal/config"
 	"image-gallery/internal/platform/cache"
-	"image-gallery/internal/platform/database"
 	"image-gallery/internal/platform/storage"
 )
 
@@ -60,13 +63,47 @@ func SetupTestContainers(ctx context.Context) (*TestContainers, error) {
 		return nil, fmt.Errorf("failed to setup redis container: %w", err)
 	}
 
-	// Run database migrations
-	if err := database.RunMigrations(containers.DB); err != nil {
+	// Apply migrations using Atlas CLI
+	if err := containers.applyMigrations(); err != nil {
 		_ = containers.Cleanup(ctx) //nolint:errcheck // Test cleanup on error
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
+		return nil, fmt.Errorf("failed to apply migrations with Atlas: %w", err)
 	}
 
 	return containers, nil
+}
+
+// applyMigrations applies schema migrations using Atlas CLI
+func (tc *TestContainers) applyMigrations() error {
+	// Set environment variable for Atlas test environment
+	originalEnv := os.Getenv("TEST_DATABASE_URL")
+	defer func() {
+		if originalEnv == "" {
+			_ = os.Unsetenv("TEST_DATABASE_URL") //nolint:errcheck // Test cleanup
+		} else {
+			_ = os.Setenv("TEST_DATABASE_URL", originalEnv) //nolint:errcheck // Test cleanup
+		}
+	}()
+
+	// Set the test database URL for Atlas
+	_ = os.Setenv("TEST_DATABASE_URL", tc.DatabaseURL) //nolint:errcheck // Test setup
+
+	// Find project root directory dynamically
+	_, filename, _, _ := runtime.Caller(0)
+	projectRoot := filepath.Join(filepath.Dir(filename), "..", "..")
+	atlasConfig := "file://" + filepath.Join(projectRoot, "atlas.hcl")
+
+	// Use Atlas CLI to apply migrations with fixed arguments
+	args := []string{"migrate", "apply", "--env", "test", "--config", atlasConfig}
+	cmd := exec.Command("atlas", args...) //nolint:gosec // Atlas CLI with controlled arguments
+	cmd.Dir = projectRoot
+
+	// Capture output for debugging
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("atlas migrate apply failed: %w\nOutput: %s", err, output)
+	}
+
+	return nil
 }
 
 // setupPostgres creates and starts a PostgreSQL test container
@@ -371,8 +408,8 @@ func (tc *TestContainers) ResetDatabase(ctx context.Context) error {
 		return fmt.Errorf("failed to commit reset transaction: %w", err)
 	}
 
-	// Re-run migrations to ensure schema is fresh
-	return database.RunMigrations(tc.DB)
+	// Re-apply migrations to ensure schema is fresh
+	return tc.applyMigrations()
 }
 
 // CreateTestBucket creates a bucket for testing
