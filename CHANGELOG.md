@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0](https://github.com/Smana/image-gallery/compare/v1.2.0...v1.3.0) (2025-10-12)
+
+
+### Features
+
+* **storage:** support EKS Pod Identity and IAM roles for S3 access ([4873b10](https://github.com/Smana/image-gallery/commit/4873b10dd10676139de7f5854ba4bec30ecc6675))
+* **storage:** support EKS Pod Identity and IAM roles for S3 access ([a43960a](https://github.com/Smana/image-gallery/commit/a43960af5b0cc76ba5b72631d566920112241d56))
+
 ## [1.2.0](https://github.com/Smana/image-gallery/compare/v1.1.0...v1.2.0) (2025-10-12)
 
 
