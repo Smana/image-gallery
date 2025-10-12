@@ -36,8 +36,17 @@ func NewService(cfg *config.StorageConfig) (*Service, error) {
 		return nil, errors.New("storage config cannot be nil")
 	}
 
+	// Use IAM credentials (EKS Pod Identity/IRSA) if no static credentials are provided
+	// This enables the application to work with AWS IAM roles for service accounts
+	var creds *credentials.Credentials
+	if cfg.AccessKeyID == "" && cfg.SecretAccessKey == "" {
+		creds = credentials.NewIAM("")
+	} else {
+		creds = credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, "")
+	}
+
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+		Creds:  creds,
 		Secure: cfg.UseSSL,
 		Region: cfg.Region,
 	})
