@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0](https://github.com/Smana/image-gallery/compare/v1.1.0...v1.2.0) (2025-10-12)
+
+
+### Features
+
+* add healthchecks handlers ([20059a3](https://github.com/Smana/image-gallery/commit/20059a3e4ba7ece4fe34ffd1a3c65bbdc5030ba1))
+* add healthchecks handlers ([f424924](https://github.com/Smana/image-gallery/commit/f424924acc57847b701a6274341be71144d20e17))
+
 ## [1.1.0](https://github.com/Smana/image-gallery/compare/v1.0.5...v1.1.0) (2025-09-27)
 
 
