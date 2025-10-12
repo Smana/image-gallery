@@ -63,6 +63,10 @@ func (h *Handler) Routes() http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 
+	// Health check endpoints (no middleware for performance)
+	r.Get("/healthz", h.healthzHandler)
+	r.Get("/readyz", h.readyzHandler)
+
 	// Serve static files
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
