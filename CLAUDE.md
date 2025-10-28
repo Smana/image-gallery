@@ -119,6 +119,134 @@ CACHE_ENABLED=false
 
 The application gracefully degrades when Valkey is unavailable - caching errors don't break functionality.
 
+### Observability with OpenTelemetry
+
+The application includes comprehensive observability using OpenTelemetry with support for **traces**, **metrics**, and **structured logs** correlated with traces.
+
+#### Architecture
+- **Traces**: Distributed tracing using OTLP → VictoriaTraces
+- **Metrics**: Custom business and infrastructure metrics → VictoriaMetrics Operator
+- **Logs**: Structured logging with zerolog, correlated with traces via trace_id/span_id
+
+#### Configuration
+
+##### Development (Local)
+```bash
+OTEL_SERVICE_NAME=image-gallery
+OTEL_SERVICE_VERSION=1.3.0
+OTEL_DEPLOYMENT_ENVIRONMENT=development
+OTEL_TRACES_ENABLED=true
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=localhost:4318
+OTEL_METRICS_ENABLED=true
+OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=localhost:4318
+LOG_LEVEL=info
+LOG_FORMAT=json
+```
+
+##### Kubernetes with VictoriaMetrics Operator
+```bash
+OTEL_SERVICE_NAME=image-gallery
+OTEL_SERVICE_VERSION=1.3.0
+OTEL_DEPLOYMENT_ENVIRONMENT=production
+OTEL_TRACES_ENABLED=true
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=victoriametrics-victoria-logs-single-server:4318
+OTEL_METRICS_ENABLED=true
+OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=vmagent:8429
+LOG_LEVEL=info
+LOG_FORMAT=json
+```
+
+#### Instrumentation Coverage
+
+**HTTP Layer** (`internal/web/handlers/`)
+- Automatic HTTP request tracing with `otelhttp` middleware
+- HTTP metrics: request count, duration, response size, active requests
+- Custom spans for business logic in handlers
+- Error tracking with span status and error recording
+
+**Service Layer** (`internal/services/implementations/`)
+- ImageService: Traces for create, get, list operations with business metrics
+- Metrics: `image.uploads.total`, `image.processing.duration`, `image.cache.hits/misses`
+- StorageService: Traces and metrics for all storage operations
+- Metrics: `storage.operations.total`, `storage.operation.duration`, `storage.bytes.transferred`
+
+**Infrastructure Layer**
+- Database query tracing (via repository pattern)
+- Storage operation tracing (MinIO/S3)
+- Cache operation tracing (Valkey/Redis)
+
+**Logging**
+- Structured JSON logging with zerolog
+- Automatic trace context injection (trace_id, span_id, trace_sampled)
+- Log levels: debug, info, warn, error, fatal, panic
+- Console format available for local development
+
+#### Key Metrics
+
+**HTTP Metrics:**
+- `http.server.request.count` - Total HTTP requests
+- `http.server.request.duration` - Request latency histogram
+- `http.server.response.size` - Response size histogram
+- `http.server.active_requests` - Active request gauge
+
+**Business Metrics:**
+- `image.uploads.total` - Total image uploads by content type
+- `image.processing.duration` - Image processing time
+- `image.cache.hits` / `image.cache.misses` - Cache hit rate
+
+**Infrastructure Metrics:**
+- `storage.operations.total` - Storage operations by type
+- `storage.operation.duration` - Storage operation latency
+- `storage.bytes.transferred` - Data transfer volume
+
+#### Example Queries
+
+**VictoriaMetrics (PromQL):**
+```promql
+# HTTP request rate by endpoint
+rate(http_server_request_count[5m])
+
+# Image upload rate by content type
+rate(image_uploads_total{status="success"}[5m])
+
+# Storage operation latency p95
+histogram_quantile(0.95, rate(storage_operation_duration_bucket[5m]))
+
+# Cache hit rate
+rate(image_cache_hits[5m]) / (rate(image_cache_hits[5m]) + rate(image_cache_misses[5m]))
+```
+
+**VictoriaTraces (Trace Queries):**
+```
+# Find slow image uploads
+service.name="image-gallery" AND name="CreateImage" AND duration > 1s
+
+# Find failed storage operations
+service.name="image-gallery" AND name="Store" AND status.code="ERROR"
+
+# Trace image retrieval with cache
+service.name="image-gallery" AND name="GetImage"
+```
+
+#### Observability Best Practices
+- **Context Propagation**: Trace context automatically propagated through all layers
+- **Semantic Conventions**: Following OpenTelemetry semantic conventions for HTTP, storage
+- **Graceful Degradation**: Observability failures don't impact application functionality
+- **Resource Detection**: Automatic service name, version, environment detection
+- **Sampling**: Currently set to AlwaysSample for demo; configure for production
+- **Batching**: Traces batched every 5s, metrics exported every 30s
+- **Shutdown**: Graceful shutdown with ForceFlush before exit
+
+#### Local Testing
+For local testing without VictoriaMetrics/VictoriaTraces, you can:
+1. Disable observability:
+   ```bash
+   OTEL_TRACES_ENABLED=false
+   OTEL_METRICS_ENABLED=false
+   ```
+2. Use Jaeger for traces (requires Jaeger running on :4318)
+3. Use Prometheus for metrics scraping
+
 ### API Endpoints
 - `GET /api/images` - List images with pagination
 - `POST /api/images` - Upload new image

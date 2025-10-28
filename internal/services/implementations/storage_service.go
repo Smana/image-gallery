@@ -9,48 +9,149 @@ import (
 	"image-gallery/internal/platform/storage"
 
 	"github.com/minio/minio-go/v7"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // StorageServiceImpl implements the image.StorageService interface
 type StorageServiceImpl struct {
 	client  *storage.MinIOClient
 	service *storage.Service
+
+	// Observability
+	tracer                    trace.Tracer
+	storageOperationsCounter  metric.Int64Counter
+	storageOperationsDuration metric.Float64Histogram
+	storageBytesTransferred   metric.Int64Counter
 }
 
 // NewStorageService creates a new storage service implementation
 func NewStorageService(client *storage.MinIOClient) image.StorageService {
-	return &StorageServiceImpl{
+	return initStorageService(&StorageServiceImpl{
 		client: client,
-	}
+	})
 }
 
 // NewStorageServiceWithService creates a new storage service with the full Service implementation
 func NewStorageServiceWithService(service *storage.Service) image.StorageService {
-	return &StorageServiceImpl{
+	return initStorageService(&StorageServiceImpl{
 		service: service,
-	}
+	})
+}
+
+// initStorageService initializes observability for storage service
+func initStorageService(s *StorageServiceImpl) *StorageServiceImpl {
+	s.tracer = otel.Tracer("image-gallery/service/storage")
+	meter := otel.Meter("image-gallery/service/storage")
+
+	// Create metrics (ignore errors for graceful degradation)
+	s.storageOperationsCounter, _ = meter.Int64Counter(
+		"storage.operations.total",
+		metric.WithDescription("Total number of storage operations"),
+		metric.WithUnit("{operation}"),
+	)
+
+	s.storageOperationsDuration, _ = meter.Float64Histogram(
+		"storage.operation.duration",
+		metric.WithDescription("Duration of storage operations"),
+		metric.WithUnit("s"),
+	)
+
+	s.storageBytesTransferred, _ = meter.Int64Counter(
+		"storage.bytes.transferred",
+		metric.WithDescription("Total bytes transferred to/from storage"),
+		metric.WithUnit("By"),
+	)
+
+	return s
 }
 
 // Store saves a file and returns the storage path
 func (s *StorageServiceImpl) Store(ctx context.Context, filename string, contentType string, data io.Reader) (string, error) {
+	startTime := time.Now()
+	ctx, span := s.tracer.Start(ctx, "Store",
+		trace.WithAttributes(
+			attribute.String("storage.filename", filename),
+			attribute.String("storage.content_type", contentType),
+		),
+	)
+	defer span.End()
+
+	var path string
+	var err error
+
 	if s.service != nil {
-		return s.service.Store(ctx, filename, contentType, data)
+		path, err = s.service.Store(ctx, filename, contentType, data)
+	} else {
+		// Fallback to MinIOClient if service not available
+		path = "images/" + filename
 	}
-	// Fallback to MinIOClient if service not available
-	return "images/" + filename, nil
+
+	// Record metrics
+	duration := time.Since(startTime).Seconds()
+	attrs := []attribute.KeyValue{
+		attribute.String("operation", "store"),
+		attribute.String("content_type", contentType),
+	}
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "store failed")
+		attrs = append(attrs, attribute.String("status", "error"))
+	} else {
+		span.SetAttributes(attribute.String("storage.path", path))
+		span.SetStatus(codes.Ok, "")
+		attrs = append(attrs, attribute.String("status", "success"))
+	}
+
+	s.storageOperationsCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	s.storageOperationsDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+
+	return path, err
 }
 
 // Retrieve gets a file from storage
 func (s *StorageServiceImpl) Retrieve(ctx context.Context, path string) (io.ReadCloser, error) {
+	startTime := time.Now()
+	ctx, span := s.tracer.Start(ctx, "Retrieve",
+		trace.WithAttributes(
+			attribute.String("storage.path", path),
+		),
+	)
+	defer span.End()
+
+	var obj io.ReadCloser
+	var err error
+
 	if s.service != nil {
-		return s.service.Retrieve(ctx, path)
+		obj, err = s.service.Retrieve(ctx, path)
+	} else {
+		// Fallback to MinIOClient
+		obj, err = s.client.GetFile(ctx, path)
 	}
-	// Fallback to MinIOClient
-	obj, err := s.client.GetFile(ctx, path)
+
+	// Record metrics
+	duration := time.Since(startTime).Seconds()
+	attrs := []attribute.KeyValue{
+		attribute.String("operation", "retrieve"),
+	}
+
 	if err != nil {
-		return nil, err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "retrieve failed")
+		attrs = append(attrs, attribute.String("status", "error"))
+	} else {
+		span.SetStatus(codes.Ok, "")
+		attrs = append(attrs, attribute.String("status", "success"))
 	}
-	return obj, nil
+
+	s.storageOperationsCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	s.storageOperationsDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+
+	return obj, err
 }
 
 // Delete removes a file from storage

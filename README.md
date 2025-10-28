@@ -10,6 +10,7 @@ graph TB
     API --> Cache[Valkey Cache<br/>Redis Compatible]
     API --> DB[(PostgreSQL<br/>Database)]
     API --> Storage[S3 Storage<br/>MinIO/AWS]
+    API --> Otel[OpenTelemetry<br/>Traces & Metrics]
 
     subgraph "Infrastructure"
         DB
@@ -21,6 +22,10 @@ graph TB
         API
         Web
     end
+
+    subgraph "Observability"
+        Otel
+    end
 ```
 
 ### Infrastructure Components
@@ -28,6 +33,7 @@ graph TB
 - **PostgreSQL Database**: Primary data store for image metadata, tags, and albums
 - **S3 Storage (MinIO/AWS)**: Object storage for actual image files and binary data
 - **Valkey Cache**: Performance optimization layer with graceful degradation
+- **OpenTelemetry**: Distributed tracing, metrics, and structured logging with trace correlation
 
 ## 🚀 Quick Start
 
@@ -65,6 +71,7 @@ make build
 - **[Architecture Details](docs/ARCHITECTURE.md)** - Clean architecture and design patterns
 
 ### Operations
+- **[Observability](OBSERVABILITY.md)** - Metrics, traces, and logging with OpenTelemetry
 - **[CI/CD Pipeline](docs/DAGGER_CI.md)** - Dagger-based continuous integration
 - **[Security Practices](docs/SECURITY.md)** - Security scanning and best practices
 - **[Release Process](docs/DEVELOPMENT.md#-release-process)** - Automated releases with conventional commits
@@ -72,6 +79,7 @@ make build
 ### Features
 - **Clean Architecture** with dependency injection
 - **Test-Driven Development** with comprehensive testing
+- **Full Observability** with OpenTelemetry (metrics, traces, logs)
 - **Containerized CI/CD** using Dagger
 - **Multi-platform Support** (Linux, macOS, ARM64, AMD64)
 - **Security-First** approach with vulnerability scanning
@@ -82,6 +90,7 @@ make build
 - **Database**: PostgreSQL with Atlas migrations
 - **Cache**: Valkey (Redis-compatible)
 - **Storage**: S3-compatible (MinIO/AWS)
+- **Observability**: OpenTelemetry with VictoriaMetrics/VictoriaTraces
 - **CI/CD**: Dagger with GitHub Actions
 - **Testing**: Testcontainers for integration tests
 

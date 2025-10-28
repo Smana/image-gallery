@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"image-gallery/internal/config"
+	"image-gallery/internal/observability"
 	"image-gallery/internal/platform/database"
 	"image-gallery/internal/platform/server"
 	"image-gallery/internal/platform/storage"
@@ -30,68 +31,107 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	// Initialize OpenTelemetry provider first (for tracing and metrics)
+	otelConfig := observability.Config{
+		ServiceName:     cfg.Observability.ServiceName,
+		ServiceVersion:  cfg.Observability.ServiceVersion,
+		Environment:     cfg.Environment,
+		TracesEndpoint:  cfg.Observability.TracesEndpoint,
+		TracesEnabled:   cfg.Observability.TracesEnabled,
+		MetricsEndpoint: cfg.Observability.MetricsEndpoint,
+		MetricsEnabled:  cfg.Observability.MetricsEnabled,
+		LogLevel:        cfg.Logging.Level,
+		LogFormat:       cfg.Logging.Format,
+	}
+
+	otelProvider, err := observability.NewProvider(context.Background(), otelConfig)
+	if err != nil {
+		log.Fatalf("Failed to initialize OpenTelemetry provider: %v", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelProvider.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Error shutting down OpenTelemetry provider: %v", err)
+		}
+	}()
+	log.Println("OpenTelemetry provider initialized")
+
+	// Initialize structured logger with trace correlation
+	logger := observability.NewLogger(otelConfig)
+	logger.GetZerolog().Info().
+		Str("service", cfg.Observability.ServiceName).
+		Str("version", cfg.Observability.ServiceVersion).
+		Str("environment", cfg.Environment).
+		Msg("Starting image-gallery service")
+
 	db, err := database.NewConnection(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.GetZerolog().Fatal().Err(err).Msg("Failed to connect to database")
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Printf("Error closing database connection: %v", err)
+			logger.GetZerolog().Error().Err(err).Msg("Error closing database connection")
 		}
 	}()
 
 	// Migrations are handled by Atlas - application never runs migrations:
 	// - Local development: Use `make migrate` (Atlas CLI)
 	// - Kubernetes: Atlas Operator handles migrations automatically
-	log.Println("Database connected - migrations are handled by Atlas")
+	logger.GetZerolog().Info().Msg("Database connected - migrations are handled by Atlas")
 
 	storageClient, err := storage.NewMinIOClient(cfg.Storage)
 	if err != nil {
 		if closeErr := db.Close(); closeErr != nil {
-			log.Printf("Error closing database connection: %v", closeErr)
+			logger.GetZerolog().Error().Err(closeErr).Msg("Error closing database connection")
 		}
-		log.Printf("Failed to connect to storage: %v", err)
-		os.Exit(1)
+		logger.GetZerolog().Fatal().Err(err).Msg("Failed to connect to storage")
 	}
+	logger.GetZerolog().Info().Msg("Storage client initialized")
 
-	// Initialize dependency injection container
-	container, err := services.NewContainer(cfg, db, storageClient)
+	// Initialize dependency injection container with observability
+	container, err := services.NewContainerWithObservability(cfg, db, storageClient, logger)
 	if err != nil {
 		if closeErr := db.Close(); closeErr != nil {
-			log.Printf("Error closing database connection: %v", closeErr)
+			logger.GetZerolog().Error().Err(closeErr).Msg("Error closing database connection")
 		}
-		log.Printf("Failed to initialize services container: %v", err)
-		os.Exit(1)
+		logger.GetZerolog().Fatal().Err(err).Msg("Failed to initialize services container")
 	}
 	defer func() {
 		if err := container.Close(); err != nil {
-			log.Printf("Error closing services container: %v", err)
+			logger.GetZerolog().Error().Err(err).Msg("Error closing services container")
 		}
 	}()
+	logger.GetZerolog().Info().Msg("Services container initialized")
 
 	handler := handlers.NewWithContainer(container)
 
 	srv := server.New(cfg.Port, handler.Routes())
 
 	go func() {
-		log.Printf("Server starting on port %s", cfg.Port)
+		logger.GetZerolog().Info().Str("port", cfg.Port).Msg("Server starting")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Server failed to start: %v", err)
-			os.Exit(1)
+			logger.GetZerolog().Fatal().Err(err).Msg("Server failed to start")
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Server shutting down...")
+	logger.GetZerolog().Info().Msg("Server shutting down...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
+	// Force flush telemetry before shutdown
+	if flushErr := otelProvider.ForceFlush(ctx); flushErr != nil {
+		logger.GetZerolog().Error().Err(flushErr).Msg("Failed to flush telemetry")
 	}
 
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.GetZerolog().Error().Err(err).Msg("Server forced to shutdown")
+	}
+
+	logger.GetZerolog().Info().Msg("Server exited gracefully")
 	fmt.Println("Server exited")
 }

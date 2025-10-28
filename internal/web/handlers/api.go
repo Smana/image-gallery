@@ -12,13 +12,44 @@ import (
 	"image-gallery/internal/services/implementations"
 
 	"github.com/go-chi/chi/v5"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func (h *Handler) listImagesHandler(w http.ResponseWriter, r *http.Request) {
-	images, err := h.getStorageImages()
+	ctx := r.Context()
+
+	// Create child span for this handler
+	var span trace.Span
+	if h.tracer != nil {
+		ctx, span = h.tracer.Start(ctx, "listImagesHandler",
+			trace.WithAttributes(
+				attribute.String("handler", "list_images"),
+				attribute.Bool("htmx_request", r.Header.Get("HX-Request") != ""),
+			),
+		)
+		defer span.End()
+	}
+
+	images, err := h.getStorageImages(ctx)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to get images")
+		}
+		if h.logger != nil {
+			h.logger.Error(ctx).Err(err).Msg("Failed to list images")
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if span != nil {
+		span.SetAttributes(attribute.Int("images.count", len(images)))
+		span.AddEvent("images_retrieved", trace.WithAttributes(
+			attribute.Int("count", len(images)),
+		))
 	}
 
 	// Check if this is an HTMX request for HTML or regular JSON request
@@ -27,23 +58,51 @@ func (h *Handler) listImagesHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		h.renderJSONResponse(w, images)
 	}
+
+	if span != nil {
+		span.SetStatus(codes.Ok, "")
+	}
 }
 
 // getStorageImages fetches and filters images from storage
-func (h *Handler) getStorageImages() ([]ImageResponse, error) {
-	ctx := context.Background()
+func (h *Handler) getStorageImages(ctx context.Context) ([]ImageResponse, error) {
+	var span trace.Span
+	if h.tracer != nil {
+		ctx, span = h.tracer.Start(ctx, "getStorageImages")
+		defer span.End()
+	}
 
 	storageServiceImpl, ok := h.storageService.(*implementations.StorageServiceImpl)
 	if !ok {
-		return nil, fmt.Errorf("storage service not available")
+		err := fmt.Errorf("storage service not available")
+		if span != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "storage service unavailable")
+		}
+		return nil, err
 	}
 
 	objects, err := storageServiceImpl.ListObjects(ctx, "", 100)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to list objects")
+		}
 		return nil, fmt.Errorf("failed to list images: %v", err)
 	}
 
-	return h.filterImageObjects(objects), nil
+	if span != nil {
+		span.SetAttributes(attribute.Int("objects.total", len(objects)))
+	}
+
+	images := h.filterImageObjects(objects)
+
+	if span != nil {
+		span.SetAttributes(attribute.Int("images.filtered", len(images)))
+		span.SetStatus(codes.Ok, "")
+	}
+
+	return images, nil
 }
 
 // filterImageObjects converts storage objects to image responses
@@ -107,24 +166,58 @@ func (h *Handler) renderJSONResponse(w http.ResponseWriter, images []ImageRespon
 }
 
 func (h *Handler) getImageHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := context.Background()
+	ctx := r.Context()
 	imagePath := chi.URLParam(r, "id")
+
+	// Create child span for this handler
+	var span trace.Span
+	if h.tracer != nil {
+		ctx, span = h.tracer.Start(ctx, "getImageHandler",
+			trace.WithAttributes(
+				attribute.String("handler", "get_image"),
+				attribute.String("image.path", imagePath),
+			),
+		)
+		defer span.End()
+	}
 
 	// Check if image exists
 	exists, err := h.storageService.Exists(ctx, imagePath)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to check existence")
+		}
+		if h.logger != nil {
+			h.logger.Error(ctx).Err(err).Str("image_path", imagePath).Msg("Error checking image existence")
+		}
 		http.Error(w, "Error checking image", http.StatusInternalServerError)
 		return
 	}
 
 	if !exists {
+		if span != nil {
+			span.SetAttributes(attribute.Bool("image.found", false))
+			span.SetStatus(codes.Error, "image not found")
+		}
 		http.Error(w, "Image not found", http.StatusNotFound)
 		return
+	}
+
+	if span != nil {
+		span.SetAttributes(attribute.Bool("image.found", true))
 	}
 
 	// Generate presigned URL
 	url, err := h.storageService.GenerateURL(ctx, imagePath, 3600)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to generate URL")
+		}
+		if h.logger != nil {
+			h.logger.Error(ctx).Err(err).Str("image_path", imagePath).Msg("Failed to generate image URL")
+		}
 		http.Error(w, "Failed to generate image URL", http.StatusInternalServerError)
 		return
 	}
@@ -132,8 +225,24 @@ func (h *Handler) getImageHandler(w http.ResponseWriter, r *http.Request) {
 	// Get image metadata
 	fileInfo, err := h.storageService.GetFileInfo(ctx, imagePath)
 	if err != nil {
+		if span != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to get file info")
+		}
+		if h.logger != nil {
+			h.logger.Error(ctx).Err(err).Str("image_path", imagePath).Msg("Failed to get image info")
+		}
 		http.Error(w, "Failed to get image info", http.StatusInternalServerError)
 		return
+	}
+
+	if span != nil {
+		span.SetAttributes(
+			attribute.Int64("image.size", fileInfo.Size),
+			attribute.String("image.content_type", fileInfo.ContentType),
+		)
+		span.AddEvent("image_info_retrieved")
+		span.SetStatus(codes.Ok, "")
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -143,6 +252,12 @@ func (h *Handler) getImageHandler(w http.ResponseWriter, r *http.Request) {
 		Size:       fileInfo.Size,
 		UploadTime: time.Unix(fileInfo.LastModified, 0).Format("2006-01-02 15:04:05"),
 	}); err != nil {
+		if span != nil {
+			span.RecordError(err)
+		}
+		if h.logger != nil {
+			h.logger.Error(ctx).Err(err).Msg("Failed to encode response")
+		}
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}

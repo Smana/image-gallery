@@ -6,6 +6,7 @@ import (
 
 	"image-gallery/internal/config"
 	"image-gallery/internal/domain/image"
+	"image-gallery/internal/observability"
 	"image-gallery/internal/platform/cache"
 	"image-gallery/internal/platform/database"
 	"image-gallery/internal/platform/storage"
@@ -42,6 +43,9 @@ type Container struct {
 	searchService       image.SearchService
 	auditService        image.AuditService
 	notificationService image.NotificationService
+
+	// Observability
+	logger *observability.Logger
 }
 
 // NewContainer creates a new dependency injection container
@@ -50,6 +54,23 @@ func NewContainer(cfg *config.Config, db *sql.DB, storageClient *storage.MinIOCl
 		config:        cfg,
 		db:            db,
 		storageClient: storageClient,
+		logger:        nil, // No logger in legacy constructor
+	}
+
+	if err := container.initializeServices(); err != nil {
+		return nil, err
+	}
+
+	return container, nil
+}
+
+// NewContainerWithObservability creates a new dependency injection container with observability support
+func NewContainerWithObservability(cfg *config.Config, db *sql.DB, storageClient *storage.MinIOClient, logger *observability.Logger) (*Container, error) {
+	container := &Container{
+		config:        cfg,
+		db:            db,
+		storageClient: storageClient,
+		logger:        logger,
 	}
 
 	if err := container.initializeServices(); err != nil {
@@ -194,6 +215,10 @@ func (c *Container) AuditService() image.AuditService {
 
 func (c *Container) NotificationService() image.NotificationService {
 	return c.notificationService
+}
+
+func (c *Container) Logger() *observability.Logger {
+	return c.logger
 }
 
 // Close cleans up resources

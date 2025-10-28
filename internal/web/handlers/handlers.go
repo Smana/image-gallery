@@ -10,11 +10,13 @@ import (
 
 	"image-gallery/internal/config"
 	"image-gallery/internal/domain/image"
+	"image-gallery/internal/observability"
 	"image-gallery/internal/platform/storage"
 	"image-gallery/internal/services"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Handler struct {
@@ -28,6 +30,11 @@ type Handler struct {
 	imageService   image.ImageService
 	tagService     image.TagService
 	storageService image.StorageService
+
+	// Observability
+	tracer      trace.Tracer
+	httpMetrics *observability.HTTPMetrics
+	logger      *observability.Logger
 }
 
 // New creates a handler with legacy dependencies (for backward compatibility)
@@ -41,6 +48,13 @@ func New(db *sql.DB, storage *storage.MinIOClient, config *config.Config) *Handl
 
 // NewWithContainer creates a handler with the dependency injection container
 func NewWithContainer(container *services.Container) *Handler {
+	// Initialize observability components
+	tracer := observability.GetTracer()
+	meter := observability.GetMeter()
+
+	// Create HTTP metrics (ignore error for graceful degradation)
+	httpMetrics, _ := observability.NewHTTPMetrics(meter)
+
 	return &Handler{
 		// Legacy fields for backward compatibility
 		db:      container.DB(),
@@ -52,18 +66,33 @@ func NewWithContainer(container *services.Container) *Handler {
 		imageService:   container.ImageService(),
 		tagService:     container.TagService(),
 		storageService: container.StorageService(),
+
+		// Observability
+		tracer:      tracer,
+		httpMetrics: httpMetrics,
+		logger:      container.Logger(),
 	}
 }
 
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(middleware.Logger)
+	// Add OpenTelemetry tracing middleware first (for all requests)
+	if h.tracer != nil {
+		r.Use(observability.TracingMiddleware(h.tracer))
+	}
+
+	// Add OpenTelemetry metrics middleware
+	if h.httpMetrics != nil {
+		r.Use(observability.MetricsMiddleware(h.httpMetrics))
+	}
+
+	// Standard Chi middleware
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 
-	// Health check endpoints (no middleware for performance)
+	// Health check endpoints (no additional middleware for performance)
 	r.Get("/healthz", h.healthzHandler)
 	r.Get("/readyz", h.readyzHandler)
 
