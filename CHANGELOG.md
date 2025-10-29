@@ -5,6 +5,19 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0](https://github.com/Smana/image-gallery/compare/v1.3.0...v1.4.0) (2025-10-29)
+
+
+### Features
+
+* **observability:** add comprehensive OpenTelemetry instrumentation ([c7df893](https://github.com/Smana/image-gallery/commit/c7df893208798bb31b5bb6dca0bcc0daf4d2a501))
+* **observability:** add comprehensive OpenTelemetry instrumentation ([6f2f695](https://github.com/Smana/image-gallery/commit/6f2f695ee14a327c0c1e21e1e3419186772f81e3))
+
+
+### Bug Fixes
+
+* **observability:** resolve linting issues - errcheck, gofmt, and cyclomatic complexity ([c77afd5](https://github.com/Smana/image-gallery/commit/c77afd56aeb5a5174307669f08256fb2b84cd496))
+
 ## [1.3.0](https://github.com/Smana/image-gallery/compare/v1.2.0...v1.3.0) (2025-10-12)
 
 
