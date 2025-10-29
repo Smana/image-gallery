@@ -11,6 +11,12 @@ import (
 	"time"
 
 	"image-gallery/internal/domain/image"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ImageServiceImpl implements the image.ImageService interface
@@ -22,6 +28,13 @@ type ImageServiceImpl struct {
 	validator image.ValidationService
 	eventPub  image.EventPublisher // can be nil
 	cache     image.CacheService   // can be nil
+
+	// Observability
+	tracer              trace.Tracer
+	imageUploadCounter  metric.Int64Counter
+	imageProcessingTime metric.Float64Histogram
+	cacheHitCounter     metric.Int64Counter
+	cacheMissCounter    metric.Int64Counter
 }
 
 // NewImageService creates a new image service implementation
@@ -34,49 +47,156 @@ func NewImageService(
 	eventPub image.EventPublisher,
 	cache image.CacheService,
 ) image.ImageService {
+	tracer := otel.Tracer("image-gallery/service/image")
+	meter := otel.Meter("image-gallery/service/image")
+
+	// Create metrics (ignore errors for graceful degradation)
+	uploadCounter, err := meter.Int64Counter(
+		"image.uploads.total",
+		metric.WithDescription("Total number of image uploads"),
+		metric.WithUnit("{upload}"),
+	)
+	if err != nil {
+		uploadCounter = nil
+	}
+
+	processingTime, err := meter.Float64Histogram(
+		"image.processing.duration",
+		metric.WithDescription("Duration of image processing operations"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		processingTime = nil
+	}
+
+	cacheHitCounter, err := meter.Int64Counter(
+		"image.cache.hits",
+		metric.WithDescription("Number of cache hits"),
+		metric.WithUnit("{hit}"),
+	)
+	if err != nil {
+		cacheHitCounter = nil
+	}
+
+	cacheMissCounter, err := meter.Int64Counter(
+		"image.cache.misses",
+		metric.WithDescription("Number of cache misses"),
+		metric.WithUnit("{miss}"),
+	)
+	if err != nil {
+		cacheMissCounter = nil
+	}
+
 	return &ImageServiceImpl{
-		imageRepo: imageRepo,
-		tagRepo:   tagRepo,
-		storage:   storage,
-		processor: processor,
-		validator: validator,
-		eventPub:  eventPub,
-		cache:     cache,
+		imageRepo:           imageRepo,
+		tagRepo:             tagRepo,
+		storage:             storage,
+		processor:           processor,
+		validator:           validator,
+		eventPub:            eventPub,
+		cache:               cache,
+		tracer:              tracer,
+		imageUploadCounter:  uploadCounter,
+		imageProcessingTime: processingTime,
+		cacheHitCounter:     cacheHitCounter,
+		cacheMissCounter:    cacheMissCounter,
 	}
 }
 
 // CreateImage handles the complete image creation process
 func (s *ImageServiceImpl) CreateImage(ctx context.Context, req *image.CreateImageRequest, data io.Reader) (*image.Image, error) {
-	if req == nil {
-		return nil, fmt.Errorf("create request cannot be nil")
+	startTime := time.Now()
+
+	// Build attributes for the span
+	attrs := []attribute.KeyValue{
+		attribute.String("image.filename", req.OriginalFilename),
+		attribute.String("image.content_type", req.ContentType),
+		attribute.Int64("image.size", req.FileSize),
+		attribute.Int("tags.count", len(req.Tags)),
+	}
+	if req.Width != nil {
+		attrs = append(attrs, attribute.Int("image.width", *req.Width))
+	}
+	if req.Height != nil {
+		attrs = append(attrs, attribute.Int("image.height", *req.Height))
 	}
 
-	if err := s.validateCreateRequest(ctx, req, data); err != nil {
+	ctx, span := s.tracer.Start(ctx, "CreateImage", trace.WithAttributes(attrs...))
+	defer span.End()
+
+	if req == nil {
+		err := fmt.Errorf("create request cannot be nil")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "nil request")
 		return nil, err
 	}
 
+	span.AddEvent("validating_request")
+	if err := s.validateCreateRequest(ctx, req, data); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "validation failed")
+		return nil, err
+	}
+
+	span.AddEvent("storing_image_file")
 	storageResp, err := s.storeImageFile(ctx, req, data)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "storage failed")
 		return nil, err
 	}
+	span.SetAttributes(attribute.String("storage.path", storageResp))
 
+	span.AddEvent("processing_tags")
 	tags, err := s.processTags(ctx, req.Tags)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "tag processing failed")
 		return nil, err
 	}
 
 	img := s.buildImageObject(req, storageResp, tags)
 	if err := img.Validate(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "validation failed")
 		return nil, fmt.Errorf("final image validation failed: %w", err)
 	}
 
+	span.AddEvent("saving_to_database")
 	if err := s.saveImageToDatabase(ctx, img, storageResp); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "database save failed")
 		return nil, err
 	}
+	span.SetAttributes(attribute.Int("image.id", img.ID))
 
 	s.handlePostCreation(ctx, img)
 
+	// Record metrics
+	s.recordImageCreationMetrics(ctx, time.Since(startTime).Seconds(), req.ContentType)
+
+	span.SetStatus(codes.Ok, "")
+	span.AddEvent("image_created_successfully")
 	return img, nil
+}
+
+func (s *ImageServiceImpl) recordImageCreationMetrics(ctx context.Context, duration float64, contentType string) {
+	if s.imageProcessingTime != nil {
+		s.imageProcessingTime.Record(ctx, duration,
+			metric.WithAttributes(
+				attribute.String("operation", "create"),
+				attribute.String("content_type", contentType),
+			),
+		)
+	}
+	if s.imageUploadCounter != nil {
+		s.imageUploadCounter.Add(ctx, 1,
+			metric.WithAttributes(
+				attribute.String("content_type", contentType),
+				attribute.String("status", "success"),
+			),
+		)
+	}
 }
 
 func (s *ImageServiceImpl) validateCreateRequest(ctx context.Context, req *image.CreateImageRequest, data io.Reader) error {
@@ -167,19 +287,50 @@ func (s *ImageServiceImpl) generateUniqueFilename(originalFilename string) strin
 
 // GetImage retrieves an image by ID with all related data
 func (s *ImageServiceImpl) GetImage(ctx context.Context, id int) (*image.Image, error) {
+	ctx, span := s.tracer.Start(ctx, "GetImage",
+		trace.WithAttributes(
+			attribute.Int("image.id", id),
+		),
+	)
+	defer span.End()
+
 	// Try to get from cache first
 	if s.cache != nil {
 		if cachedImage, err := s.cache.GetImage(ctx, id); err == nil {
+			span.AddEvent("cache_hit")
+			span.SetAttributes(attribute.Bool("cache.hit", true))
+			if s.cacheHitCounter != nil {
+				s.cacheHitCounter.Add(ctx, 1,
+					metric.WithAttributes(attribute.String("operation", "get_image")),
+				)
+			}
+			span.SetStatus(codes.Ok, "")
 			return cachedImage, nil
 		}
 		// If cache miss or error, continue to database
+		span.AddEvent("cache_miss")
+		span.SetAttributes(attribute.Bool("cache.hit", false))
+		if s.cacheMissCounter != nil {
+			s.cacheMissCounter.Add(ctx, 1,
+				metric.WithAttributes(attribute.String("operation", "get_image")),
+			)
+		}
 	}
 
 	// Get from database
+	span.AddEvent("fetching_from_database")
 	img, err := s.imageRepo.GetByID(ctx, id)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "database fetch failed")
 		return nil, err
 	}
+
+	span.SetAttributes(
+		attribute.String("image.filename", img.Filename),
+		attribute.String("image.content_type", img.ContentType),
+		attribute.Int64("image.size", img.FileSize),
+	)
 
 	// Cache the result for future requests
 	if s.cache != nil {
@@ -187,10 +338,14 @@ func (s *ImageServiceImpl) GetImage(ctx context.Context, id int) (*image.Image, 
 		if cacheErr := s.cache.SetImage(ctx, img, 3600); cacheErr != nil {
 			// Cache errors are intentionally ignored to avoid impacting user requests
 			// In production, this would be logged for monitoring purposes
+			span.AddEvent("cache_set_failed")
 			_ = cacheErr // explicitly ignore
+		} else {
+			span.AddEvent("cached_for_future_requests")
 		}
 	}
 
+	span.SetStatus(codes.Ok, "")
 	return img, nil
 }
 

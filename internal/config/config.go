@@ -11,14 +11,15 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Environment string
-	Port        string
-	Host        string
-	DatabaseURL string
-	Storage     StorageConfig
-	Cache       CacheConfig
-	Logging     *LoggingConfig
-	Server      *ServerConfig
+	Environment   string
+	Port          string
+	Host          string
+	DatabaseURL   string
+	Storage       StorageConfig
+	Cache         CacheConfig
+	Logging       *LoggingConfig
+	Server        *ServerConfig
+	Observability ObservabilityConfig
 }
 
 // StorageConfig holds object storage configuration
@@ -66,6 +67,16 @@ type ServerConfig struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
+}
+
+// ObservabilityConfig holds OpenTelemetry configuration
+type ObservabilityConfig struct {
+	ServiceName     string
+	ServiceVersion  string
+	TracesEndpoint  string
+	TracesEnabled   bool
+	MetricsEndpoint string
+	MetricsEnabled  bool
 }
 
 // Load creates a new configuration from environment variables with validation
@@ -139,6 +150,14 @@ func Load() (*Config, error) {
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
 			IdleTimeout:  idleTimeout,
+		},
+		Observability: ObservabilityConfig{
+			ServiceName:     getEnv("OTEL_SERVICE_NAME", "image-gallery"),
+			ServiceVersion:  getEnv("OTEL_SERVICE_VERSION", "1.3.0"),
+			TracesEndpoint:  getEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "localhost:4318"),
+			TracesEnabled:   parseBoolOrDefault(getEnv("OTEL_TRACES_ENABLED", "true"), true),
+			MetricsEndpoint: getEnv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "localhost:4318"),
+			MetricsEnabled:  parseBoolOrDefault(getEnv("OTEL_METRICS_ENABLED", "true"), true),
 		},
 	}
 
