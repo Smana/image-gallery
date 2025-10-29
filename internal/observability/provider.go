@@ -90,7 +90,7 @@ func NewProvider(ctx context.Context, config Config) (*Provider, error) {
 func initTracerProvider(ctx context.Context, res *resource.Resource, config Config) (*sdktrace.TracerProvider, error) {
 	// Create OTLP HTTP trace exporter
 	traceExporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint(config.TracesEndpoint),
+		otlptracehttp.WithEndpointURL(config.TracesEndpoint),
 		otlptracehttp.WithInsecure(), // Use insecure for local dev; configure TLS for production
 	)
 	if err != nil {
@@ -114,7 +114,7 @@ func initTracerProvider(ctx context.Context, res *resource.Resource, config Conf
 func initMeterProvider(ctx context.Context, res *resource.Resource, config Config) (*sdkmetric.MeterProvider, error) {
 	// Create OTLP HTTP metric exporter
 	metricExporter, err := otlpmetrichttp.New(ctx,
-		otlpmetrichttp.WithEndpoint(config.MetricsEndpoint),
+		otlpmetrichttp.WithEndpointURL(config.MetricsEndpoint),
 		otlpmetrichttp.WithInsecure(), // Use insecure for local dev; configure TLS for production
 	)
 	if err != nil {
