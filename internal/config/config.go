@@ -11,15 +11,15 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	Environment    string
-	Port           string
-	Host           string
-	DatabaseURL    string
-	Storage        StorageConfig
-	Cache          CacheConfig
-	Logging        *LoggingConfig
-	Server         *ServerConfig
-	Observability  ObservabilityConfig
+	Environment   string
+	Port          string
+	Host          string
+	DatabaseURL   string
+	Storage       StorageConfig
+	Cache         CacheConfig
+	Logging       *LoggingConfig
+	Server        *ServerConfig
+	Observability ObservabilityConfig
 }
 
 // StorageConfig holds object storage configuration

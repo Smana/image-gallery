@@ -48,23 +48,33 @@ func initStorageService(s *StorageServiceImpl) *StorageServiceImpl {
 	meter := otel.Meter("image-gallery/service/storage")
 
 	// Create metrics (ignore errors for graceful degradation)
-	s.storageOperationsCounter, _ = meter.Int64Counter(
+	var err error
+	s.storageOperationsCounter, err = meter.Int64Counter(
 		"storage.operations.total",
 		metric.WithDescription("Total number of storage operations"),
 		metric.WithUnit("{operation}"),
 	)
+	if err != nil {
+		s.storageOperationsCounter = nil
+	}
 
-	s.storageOperationsDuration, _ = meter.Float64Histogram(
+	s.storageOperationsDuration, err = meter.Float64Histogram(
 		"storage.operation.duration",
 		metric.WithDescription("Duration of storage operations"),
 		metric.WithUnit("s"),
 	)
+	if err != nil {
+		s.storageOperationsDuration = nil
+	}
 
-	s.storageBytesTransferred, _ = meter.Int64Counter(
+	s.storageBytesTransferred, err = meter.Int64Counter(
 		"storage.bytes.transferred",
 		metric.WithDescription("Total bytes transferred to/from storage"),
 		metric.WithUnit("By"),
 	)
+	if err != nil {
+		s.storageBytesTransferred = nil
+	}
 
 	return s
 }
@@ -107,8 +117,12 @@ func (s *StorageServiceImpl) Store(ctx context.Context, filename string, content
 		attrs = append(attrs, attribute.String("status", "success"))
 	}
 
-	s.storageOperationsCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
-	s.storageOperationsDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+	if s.storageOperationsCounter != nil {
+		s.storageOperationsCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+	if s.storageOperationsDuration != nil {
+		s.storageOperationsDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+	}
 
 	return path, err
 }
@@ -148,8 +162,12 @@ func (s *StorageServiceImpl) Retrieve(ctx context.Context, path string) (io.Read
 		attrs = append(attrs, attribute.String("status", "success"))
 	}
 
-	s.storageOperationsCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
-	s.storageOperationsDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+	if s.storageOperationsCounter != nil {
+		s.storageOperationsCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+	if s.storageOperationsDuration != nil {
+		s.storageOperationsDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+	}
 
 	return obj, err
 }

@@ -53,7 +53,10 @@ func NewWithContainer(container *services.Container) *Handler {
 	meter := observability.GetMeter()
 
 	// Create HTTP metrics (ignore error for graceful degradation)
-	httpMetrics, _ := observability.NewHTTPMetrics(meter)
+	httpMetrics, err := observability.NewHTTPMetrics(meter)
+	if err != nil {
+		httpMetrics = nil
+	}
 
 	return &Handler{
 		// Legacy fields for backward compatibility

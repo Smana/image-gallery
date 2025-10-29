@@ -67,7 +67,9 @@ func NewProvider(ctx context.Context, config Config) (*Provider, error) {
 		if err != nil {
 			// Clean up tracer provider if metrics fail
 			if p.tracerProvider != nil {
-				_ = p.tracerProvider.Shutdown(ctx)
+				if shutdownErr := p.tracerProvider.Shutdown(ctx); shutdownErr != nil {
+					return nil, fmt.Errorf("failed to initialize meter provider: %w (tracer shutdown also failed: %v)", err, shutdownErr)
+				}
 			}
 			return nil, fmt.Errorf("failed to initialize meter provider: %w", err)
 		}

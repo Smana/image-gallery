@@ -51,29 +51,41 @@ func NewImageService(
 	meter := otel.Meter("image-gallery/service/image")
 
 	// Create metrics (ignore errors for graceful degradation)
-	uploadCounter, _ := meter.Int64Counter(
+	uploadCounter, err := meter.Int64Counter(
 		"image.uploads.total",
 		metric.WithDescription("Total number of image uploads"),
 		metric.WithUnit("{upload}"),
 	)
+	if err != nil {
+		uploadCounter = nil
+	}
 
-	processingTime, _ := meter.Float64Histogram(
+	processingTime, err := meter.Float64Histogram(
 		"image.processing.duration",
 		metric.WithDescription("Duration of image processing operations"),
 		metric.WithUnit("s"),
 	)
+	if err != nil {
+		processingTime = nil
+	}
 
-	cacheHitCounter, _ := meter.Int64Counter(
+	cacheHitCounter, err := meter.Int64Counter(
 		"image.cache.hits",
 		metric.WithDescription("Number of cache hits"),
 		metric.WithUnit("{hit}"),
 	)
+	if err != nil {
+		cacheHitCounter = nil
+	}
 
-	cacheMissCounter, _ := meter.Int64Counter(
+	cacheMissCounter, err := meter.Int64Counter(
 		"image.cache.misses",
 		metric.WithDescription("Number of cache misses"),
 		metric.WithUnit("{miss}"),
 	)
+	if err != nil {
+		cacheMissCounter = nil
+	}
 
 	return &ImageServiceImpl{
 		imageRepo:           imageRepo,
@@ -161,23 +173,30 @@ func (s *ImageServiceImpl) CreateImage(ctx context.Context, req *image.CreateIma
 	s.handlePostCreation(ctx, img)
 
 	// Record metrics
-	duration := time.Since(startTime).Seconds()
-	s.imageProcessingTime.Record(ctx, duration,
-		metric.WithAttributes(
-			attribute.String("operation", "create"),
-			attribute.String("content_type", req.ContentType),
-		),
-	)
-	s.imageUploadCounter.Add(ctx, 1,
-		metric.WithAttributes(
-			attribute.String("content_type", req.ContentType),
-			attribute.String("status", "success"),
-		),
-	)
+	s.recordImageCreationMetrics(ctx, time.Since(startTime).Seconds(), req.ContentType)
 
 	span.SetStatus(codes.Ok, "")
 	span.AddEvent("image_created_successfully")
 	return img, nil
+}
+
+func (s *ImageServiceImpl) recordImageCreationMetrics(ctx context.Context, duration float64, contentType string) {
+	if s.imageProcessingTime != nil {
+		s.imageProcessingTime.Record(ctx, duration,
+			metric.WithAttributes(
+				attribute.String("operation", "create"),
+				attribute.String("content_type", contentType),
+			),
+		)
+	}
+	if s.imageUploadCounter != nil {
+		s.imageUploadCounter.Add(ctx, 1,
+			metric.WithAttributes(
+				attribute.String("content_type", contentType),
+				attribute.String("status", "success"),
+			),
+		)
+	}
 }
 
 func (s *ImageServiceImpl) validateCreateRequest(ctx context.Context, req *image.CreateImageRequest, data io.Reader) error {
@@ -280,18 +299,22 @@ func (s *ImageServiceImpl) GetImage(ctx context.Context, id int) (*image.Image, 
 		if cachedImage, err := s.cache.GetImage(ctx, id); err == nil {
 			span.AddEvent("cache_hit")
 			span.SetAttributes(attribute.Bool("cache.hit", true))
-			s.cacheHitCounter.Add(ctx, 1,
-				metric.WithAttributes(attribute.String("operation", "get_image")),
-			)
+			if s.cacheHitCounter != nil {
+				s.cacheHitCounter.Add(ctx, 1,
+					metric.WithAttributes(attribute.String("operation", "get_image")),
+				)
+			}
 			span.SetStatus(codes.Ok, "")
 			return cachedImage, nil
 		}
 		// If cache miss or error, continue to database
 		span.AddEvent("cache_miss")
 		span.SetAttributes(attribute.Bool("cache.hit", false))
-		s.cacheMissCounter.Add(ctx, 1,
-			metric.WithAttributes(attribute.String("operation", "get_image")),
-		)
+		if s.cacheMissCounter != nil {
+			s.cacheMissCounter.Add(ctx, 1,
+				metric.WithAttributes(attribute.String("operation", "get_image")),
+			)
+		}
 	}
 
 	// Get from database

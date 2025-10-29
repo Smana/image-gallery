@@ -170,54 +170,32 @@ func (h *Handler) getImageHandler(w http.ResponseWriter, r *http.Request) {
 	imagePath := chi.URLParam(r, "id")
 
 	// Create child span for this handler
-	var span trace.Span
-	if h.tracer != nil {
-		ctx, span = h.tracer.Start(ctx, "getImageHandler",
-			trace.WithAttributes(
-				attribute.String("handler", "get_image"),
-				attribute.String("image.path", imagePath),
-			),
-		)
-		defer span.End()
-	}
+	ctx, span := h.startSpan(ctx, "getImageHandler",
+		attribute.String("handler", "get_image"),
+		attribute.String("image.path", imagePath),
+	)
+	defer h.endSpan(span)
 
 	// Check if image exists
 	exists, err := h.storageService.Exists(ctx, imagePath)
 	if err != nil {
-		if span != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to check existence")
-		}
-		if h.logger != nil {
-			h.logger.Error(ctx).Err(err).Str("image_path", imagePath).Msg("Error checking image existence")
-		}
+		h.handleError(ctx, span, err, "Error checking image existence", "failed to check existence", imagePath)
 		http.Error(w, "Error checking image", http.StatusInternalServerError)
 		return
 	}
 
 	if !exists {
-		if span != nil {
-			span.SetAttributes(attribute.Bool("image.found", false))
-			span.SetStatus(codes.Error, "image not found")
-		}
+		h.setSpanStatus(span, codes.Error, "image not found", attribute.Bool("image.found", false))
 		http.Error(w, "Image not found", http.StatusNotFound)
 		return
 	}
 
-	if span != nil {
-		span.SetAttributes(attribute.Bool("image.found", true))
-	}
+	h.setSpanAttributes(span, attribute.Bool("image.found", true))
 
 	// Generate presigned URL
 	url, err := h.storageService.GenerateURL(ctx, imagePath, 3600)
 	if err != nil {
-		if span != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to generate URL")
-		}
-		if h.logger != nil {
-			h.logger.Error(ctx).Err(err).Str("image_path", imagePath).Msg("Failed to generate image URL")
-		}
+		h.handleError(ctx, span, err, "Failed to generate image URL", "failed to generate URL", imagePath)
 		http.Error(w, "Failed to generate image URL", http.StatusInternalServerError)
 		return
 	}
@@ -225,25 +203,17 @@ func (h *Handler) getImageHandler(w http.ResponseWriter, r *http.Request) {
 	// Get image metadata
 	fileInfo, err := h.storageService.GetFileInfo(ctx, imagePath)
 	if err != nil {
-		if span != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to get file info")
-		}
-		if h.logger != nil {
-			h.logger.Error(ctx).Err(err).Str("image_path", imagePath).Msg("Failed to get image info")
-		}
+		h.handleError(ctx, span, err, "Failed to get image info", "failed to get file info", imagePath)
 		http.Error(w, "Failed to get image info", http.StatusInternalServerError)
 		return
 	}
 
-	if span != nil {
-		span.SetAttributes(
-			attribute.Int64("image.size", fileInfo.Size),
-			attribute.String("image.content_type", fileInfo.ContentType),
-		)
-		span.AddEvent("image_info_retrieved")
-		span.SetStatus(codes.Ok, "")
-	}
+	h.setSpanAttributes(span,
+		attribute.Int64("image.size", fileInfo.Size),
+		attribute.String("image.content_type", fileInfo.ContentType),
+	)
+	h.addSpanEvent(span, "image_info_retrieved")
+	h.setSpanStatus(span, codes.Ok, "")
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(ImageResponse{
@@ -252,14 +222,61 @@ func (h *Handler) getImageHandler(w http.ResponseWriter, r *http.Request) {
 		Size:       fileInfo.Size,
 		UploadTime: time.Unix(fileInfo.LastModified, 0).Format("2006-01-02 15:04:05"),
 	}); err != nil {
-		if span != nil {
-			span.RecordError(err)
-		}
-		if h.logger != nil {
-			h.logger.Error(ctx).Err(err).Msg("Failed to encode response")
-		}
+		h.handleError(ctx, span, err, "Failed to encode response", "", "")
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
+	}
+}
+
+// Helper methods to reduce cyclomatic complexity in handlers
+
+func (h *Handler) startSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
+	if h.tracer != nil {
+		return h.tracer.Start(ctx, name, trace.WithAttributes(attrs...))
+	}
+	return ctx, nil
+}
+
+func (h *Handler) endSpan(span trace.Span) {
+	if span != nil {
+		span.End()
+	}
+}
+
+func (h *Handler) setSpanAttributes(span trace.Span, attrs ...attribute.KeyValue) {
+	if span != nil {
+		span.SetAttributes(attrs...)
+	}
+}
+
+func (h *Handler) addSpanEvent(span trace.Span, name string) {
+	if span != nil {
+		span.AddEvent(name)
+	}
+}
+
+func (h *Handler) setSpanStatus(span trace.Span, code codes.Code, description string, attrs ...attribute.KeyValue) {
+	if span != nil {
+		if len(attrs) > 0 {
+			span.SetAttributes(attrs...)
+		}
+		span.SetStatus(code, description)
+	}
+}
+
+func (h *Handler) handleError(ctx context.Context, span trace.Span, err error, logMsg, spanMsg, imagePath string) {
+	if span != nil {
+		span.RecordError(err)
+		if spanMsg != "" {
+			span.SetStatus(codes.Error, spanMsg)
+		}
+	}
+	if h.logger != nil && logMsg != "" {
+		logger := h.logger.Error(ctx).Err(err)
+		if imagePath != "" {
+			logger = logger.Str("image_path", imagePath)
+		}
+		logger.Msg(logMsg)
 	}
 }
 
