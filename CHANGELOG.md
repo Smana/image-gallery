@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1](https://github.com/Smana/image-gallery/compare/v1.4.0...v1.4.1) (2025-10-29)
+
+
+### Bug Fixes
+
+* **observability:** correct OTLP endpoint URL handling ([9e402fa](https://github.com/Smana/image-gallery/commit/9e402fa56e3b4cfb24fe22ba0669c0e28a4246f2))
+* **observability:** use WithEndpointURL for OTLP exporters ([78b4c46](https://github.com/Smana/image-gallery/commit/78b4c46c0b9c6bc606f06e157b16b4342c88c357))
+
 ## [1.4.0](https://github.com/Smana/image-gallery/compare/v1.3.0...v1.4.0) (2025-10-29)
 
 
