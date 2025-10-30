@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2](https://github.com/Smana/image-gallery/compare/v1.4.1...v1.4.2) (2025-10-30)
+
+
+### Bug Fixes
+
+* **observability:** remove WithInsecure() when using WithEndpointURL ([68a9b11](https://github.com/Smana/image-gallery/commit/68a9b117876935ba5c6cf22158457572eb7dbeda))
+* **observability:** remove WithInsecure() when using WithEndpointURL ([130b51f](https://github.com/Smana/image-gallery/commit/130b51f69ffa6663e962a6a7d8e042ebce1b3fb3))
+
 ## [1.4.1](https://github.com/Smana/image-gallery/compare/v1.4.0...v1.4.1) (2025-10-29)
 
 
