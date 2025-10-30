@@ -89,9 +89,9 @@ func NewProvider(ctx context.Context, config Config) (*Provider, error) {
 // initTracerProvider creates and configures a tracer provider with OTLP exporter
 func initTracerProvider(ctx context.Context, res *resource.Resource, config Config) (*sdktrace.TracerProvider, error) {
 	// Create OTLP HTTP trace exporter
+	// WithEndpointURL already specifies the scheme (http:// or https://), so WithInsecure() is not needed
 	traceExporter, err := otlptracehttp.New(ctx,
 		otlptracehttp.WithEndpointURL(config.TracesEndpoint),
-		otlptracehttp.WithInsecure(), // Use insecure for local dev; configure TLS for production
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
@@ -113,9 +113,9 @@ func initTracerProvider(ctx context.Context, res *resource.Resource, config Conf
 // initMeterProvider creates and configures a meter provider with OTLP exporter
 func initMeterProvider(ctx context.Context, res *resource.Resource, config Config) (*sdkmetric.MeterProvider, error) {
 	// Create OTLP HTTP metric exporter
+	// WithEndpointURL already specifies the scheme (http:// or https://), so WithInsecure() is not needed
 	metricExporter, err := otlpmetrichttp.New(ctx,
 		otlpmetrichttp.WithEndpointURL(config.MetricsEndpoint),
-		otlpmetrichttp.WithInsecure(), // Use insecure for local dev; configure TLS for production
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
