@@ -27,9 +27,14 @@ type Provider struct {
 }
 
 // NewProvider creates and initializes a new OpenTelemetry provider
-func NewProvider(ctx context.Context, config Config) (*Provider, error) {
+func NewProvider(ctx context.Context, config Config, logger *Logger) (*Provider, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
+	// Set OTEL error handler to use structured logging
+	if logger != nil {
+		otel.SetErrorHandler(otel.ErrorHandlerFunc(logger.OTELErrorHandler()))
 	}
 
 	// Create resource with service information

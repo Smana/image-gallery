@@ -121,3 +121,13 @@ func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
 		logger: ctx.Logger(),
 	}
 }
+
+// OTELErrorHandler returns a function that handles OTEL errors using structured logging
+func (l *Logger) OTELErrorHandler() func(error) {
+	return func(err error) {
+		l.logger.Error().
+			Err(err).
+			Str("source", "otel_sdk").
+			Msg("OpenTelemetry SDK error")
+	}
+}

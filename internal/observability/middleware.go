@@ -14,6 +14,8 @@ import (
 
 const (
 	instrumentationName = "github.com/smana/image-gallery/http"
+	healthzPath         = "/healthz"
+	readyzPath          = "/readyz"
 )
 
 // HTTPMetrics holds HTTP-related metrics instruments
@@ -92,6 +94,12 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 func MetricsMiddleware(metrics *HTTPMetrics) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip health check endpoints
+			if r.URL.Path == healthzPath || r.URL.Path == readyzPath {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			start := time.Now()
 			ctx := r.Context()
 
@@ -131,6 +139,12 @@ func MetricsMiddleware(metrics *HTTPMetrics) func(http.Handler) http.Handler {
 func TracingMiddleware(tracer trace.Tracer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip health check endpoints
+			if r.URL.Path == healthzPath || r.URL.Path == readyzPath {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			// Start span
 			ctx, span := tracer.Start(r.Context(), r.Method+" "+r.URL.Path,
 				trace.WithSpanKind(trace.SpanKindServer),

@@ -31,7 +31,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize OpenTelemetry provider first (for tracing and metrics)
+	// Initialize OpenTelemetry configuration
 	otelConfig := observability.Config{
 		ServiceName:      cfg.Observability.ServiceName,
 		ServiceVersion:   cfg.Observability.ServiceVersion,
@@ -46,26 +46,27 @@ func main() {
 		LogFormat:        cfg.Logging.Format,
 	}
 
-	otelProvider, err := observability.NewProvider(context.Background(), otelConfig)
-	if err != nil {
-		log.Fatalf("Failed to initialize OpenTelemetry provider: %v", err)
-	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := otelProvider.Shutdown(shutdownCtx); err != nil {
-			log.Printf("Error shutting down OpenTelemetry provider: %v", err)
-		}
-	}()
-	log.Println("OpenTelemetry provider initialized")
-
-	// Initialize structured logger with trace correlation
+	// Initialize structured logger first (before OTEL provider)
 	logger := observability.NewLogger(otelConfig)
 	logger.GetZerolog().Info().
 		Str("service", cfg.Observability.ServiceName).
 		Str("version", cfg.Observability.ServiceVersion).
 		Str("environment", cfg.Environment).
-		Msg("Starting image-gallery service")
+		Msg("Initializing image-gallery service")
+
+	// Initialize OpenTelemetry provider with error handling
+	otelProvider, err := observability.NewProvider(context.Background(), otelConfig, logger)
+	if err != nil {
+		logger.GetZerolog().Fatal().Err(err).Msg("Failed to initialize OpenTelemetry provider")
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelProvider.Shutdown(shutdownCtx); err != nil {
+			logger.GetZerolog().Error().Err(err).Msg("Error shutting down OpenTelemetry provider")
+		}
+	}()
+	logger.GetZerolog().Info().Msg("OpenTelemetry provider initialized")
 
 	db, err := database.NewConnection(cfg.DatabaseURL)
 	if err != nil {
