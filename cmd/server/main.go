@@ -33,15 +33,17 @@ func main() {
 
 	// Initialize OpenTelemetry provider first (for tracing and metrics)
 	otelConfig := observability.Config{
-		ServiceName:     cfg.Observability.ServiceName,
-		ServiceVersion:  cfg.Observability.ServiceVersion,
-		Environment:     cfg.Environment,
-		TracesEndpoint:  cfg.Observability.TracesEndpoint,
-		TracesEnabled:   cfg.Observability.TracesEnabled,
-		MetricsEndpoint: cfg.Observability.MetricsEndpoint,
-		MetricsEnabled:  cfg.Observability.MetricsEnabled,
-		LogLevel:        cfg.Logging.Level,
-		LogFormat:       cfg.Logging.Format,
+		ServiceName:      cfg.Observability.ServiceName,
+		ServiceVersion:   cfg.Observability.ServiceVersion,
+		Environment:      cfg.Environment,
+		TracesEndpoint:   cfg.Observability.TracesEndpoint,
+		TracesEnabled:    cfg.Observability.TracesEnabled,
+		TracesSampler:    cfg.Observability.TracesSampler,
+		TracesSamplerArg: cfg.Observability.TracesSamplerArg,
+		MetricsEndpoint:  cfg.Observability.MetricsEndpoint,
+		MetricsEnabled:   cfg.Observability.MetricsEnabled,
+		LogLevel:         cfg.Logging.Level,
+		LogFormat:        cfg.Logging.Format,
 	}
 
 	otelProvider, err := observability.NewProvider(context.Background(), otelConfig)
