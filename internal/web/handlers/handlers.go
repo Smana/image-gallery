@@ -113,6 +113,8 @@ func (h *Handler) Routes() http.Handler {
 			r.Get("/{id}", h.getImageHandler)
 			r.Get("/{id}/view", h.viewImageHandler) // Proxy endpoint for viewing images
 		})
+		// Test endpoint for observability validation (generates traces + logs)
+		r.Get("/test-db", h.testDatabaseHandler)
 	})
 
 	return r

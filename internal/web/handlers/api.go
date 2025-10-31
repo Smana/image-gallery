@@ -17,6 +17,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+const (
+	scenarioError = "error"
+	statusSuccess = "success"
+	statusError   = "error"
+)
+
 func (h *Handler) listImagesHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -341,4 +347,131 @@ func formatFileSize(bytes int64) string {
 	}
 	units := []string{"KB", "MB", "GB", "TB"}
 	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), units[exp])
+}
+
+// testDatabaseHandler is a test endpoint to validate observability:
+// - Creates trace spans for HTTP request and database queries
+// - Logs at different levels including errors
+// - Demonstrates full stack tracing from HTTP → Database
+func (h *Handler) testDatabaseHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Create span for this handler
+	ctx, span := h.startSpan(ctx, "testDatabaseHandler",
+		attribute.String("handler", "test_database"),
+		attribute.String("test.type", "observability_validation"),
+	)
+	defer h.endSpan(span)
+
+	// Get scenario parameter (normal, error, slow)
+	scenario := r.URL.Query().Get("scenario")
+	if scenario == "" {
+		scenario = "normal"
+	}
+
+	h.setSpanAttributes(span, attribute.String("test.scenario", scenario))
+
+	response := make(map[string]any)
+	response["scenario"] = scenario
+
+	switch scenario {
+	case scenarioError:
+		// Simulate a database error for testing error logs and traces
+		h.handleErrorScenario(ctx, span, w, response)
+		return
+	case "slow":
+		// Simulate a slow database query
+		h.handleSlowScenario(ctx, span, w, response)
+		return
+	default:
+		// Normal scenario - successful database query
+		h.handleNormalScenario(ctx, span, w, response)
+		return
+	}
+}
+
+func (h *Handler) handleErrorScenario(ctx context.Context, span trace.Span, w http.ResponseWriter, response map[string]any) {
+	// Try to query a non-existent table to trigger a database error
+	var count int
+	query := "SELECT COUNT(*) FROM non_existent_table_for_testing"
+
+	h.addSpanEvent(span, "executing_error_query")
+
+	err := h.db.QueryRowContext(ctx, query).Scan(&count)
+	if err != nil {
+		// This is expected - log the error and record in span
+		h.handleError(ctx, span, err, "Database error (expected for testing)", "database_error_scenario", "")
+
+		response["status"] = statusError
+		response["error"] = err.Error()
+		response["message"] = "Successfully generated database error for testing"
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		if encodeErr := json.NewEncoder(w).Encode(response); encodeErr != nil {
+			h.logger.Error(ctx).Err(encodeErr).Msg("Failed to encode error response")
+		}
+		return
+	}
+}
+
+func (h *Handler) handleSlowScenario(ctx context.Context, span trace.Span, w http.ResponseWriter, response map[string]any) {
+	// Execute a slow query using pg_sleep
+	query := "SELECT pg_sleep(2), NOW() as current_time"
+
+	h.addSpanEvent(span, "executing_slow_query")
+
+	var currentTime string
+	if err := h.db.QueryRowContext(ctx, query).Scan(nil, &currentTime); err != nil {
+		h.handleError(ctx, span, err, "Slow query failed", "slow_query_error", "")
+		http.Error(w, "Slow query failed", http.StatusInternalServerError)
+		return
+	}
+
+	h.setSpanAttributes(span,
+		attribute.String("query.type", "slow"),
+		attribute.Int("query.duration_seconds", 2),
+	)
+
+	response["status"] = statusSuccess
+	response["message"] = "Completed slow query (2 seconds)"
+	response["database_time"] = currentTime
+
+	h.setSpanStatus(span, codes.Ok, "")
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error(ctx).Err(err).Msg("Failed to encode response")
+	}
+}
+
+func (h *Handler) handleNormalScenario(ctx context.Context, span trace.Span, w http.ResponseWriter, response map[string]any) {
+	// Execute a normal query
+	query := "SELECT version(), NOW() as current_time"
+
+	h.addSpanEvent(span, "executing_version_query")
+
+	var version, currentTime string
+	if err := h.db.QueryRowContext(ctx, query).Scan(&version, &currentTime); err != nil {
+		h.handleError(ctx, span, err, "Version query failed", "version_query_error", "")
+		http.Error(w, "Version query failed", http.StatusInternalServerError)
+		return
+	}
+
+	h.setSpanAttributes(span,
+		attribute.String("database.version", version),
+		attribute.String("query.type", "normal"),
+	)
+
+	response["status"] = statusSuccess
+	response["database_version"] = version
+	response["database_time"] = currentTime
+	response["message"] = "Database query successful"
+
+	h.setSpanStatus(span, codes.Ok, "")
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error(ctx).Err(err).Msg("Failed to encode response")
+	}
 }
