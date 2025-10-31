@@ -71,12 +71,14 @@ type ServerConfig struct {
 
 // ObservabilityConfig holds OpenTelemetry configuration
 type ObservabilityConfig struct {
-	ServiceName     string
-	ServiceVersion  string
-	TracesEndpoint  string
-	TracesEnabled   bool
-	MetricsEndpoint string
-	MetricsEnabled  bool
+	ServiceName      string
+	ServiceVersion   string
+	TracesEndpoint   string
+	TracesEnabled    bool
+	TracesSampler    string
+	TracesSamplerArg string
+	MetricsEndpoint  string
+	MetricsEnabled   bool
 }
 
 // Load creates a new configuration from environment variables with validation
@@ -152,12 +154,14 @@ func Load() (*Config, error) {
 			IdleTimeout:  idleTimeout,
 		},
 		Observability: ObservabilityConfig{
-			ServiceName:     getEnv("OTEL_SERVICE_NAME", "image-gallery"),
-			ServiceVersion:  getEnv("OTEL_SERVICE_VERSION", "1.3.0"),
-			TracesEndpoint:  getEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "localhost:4318"),
-			TracesEnabled:   parseBoolOrDefault(getEnv("OTEL_TRACES_ENABLED", "true"), true),
-			MetricsEndpoint: getEnv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "localhost:4318"),
-			MetricsEnabled:  parseBoolOrDefault(getEnv("OTEL_METRICS_ENABLED", "true"), true),
+			ServiceName:      getEnv("OTEL_SERVICE_NAME", "image-gallery"),
+			ServiceVersion:   getEnv("OTEL_SERVICE_VERSION", "1.3.0"),
+			TracesEndpoint:   getEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "localhost:4318"),
+			TracesEnabled:    parseBoolOrDefault(getEnv("OTEL_TRACES_ENABLED", "true"), true),
+			TracesSampler:    getEnv("OTEL_TRACES_SAMPLER", "always_on"),
+			TracesSamplerArg: getEnv("OTEL_TRACES_SAMPLER_ARG", "1.0"),
+			MetricsEndpoint:  getEnv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "localhost:4318"),
+			MetricsEnabled:   parseBoolOrDefault(getEnv("OTEL_METRICS_ENABLED", "true"), true),
 		},
 	}
 
