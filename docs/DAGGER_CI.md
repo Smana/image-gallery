@@ -1,6 +1,6 @@
 # Dagger CI/CD Pipeline
 
-This document describes the containerized CI/CD pipeline implementation using Dagger with existing Daggerverse modules.
+This document describes the CI/CD pipeline implementation using Dagger with existing Daggerverse modules.
 
 ## 🎯 Overview
 
