@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0](https://github.com/Smana/image-gallery/compare/v1.4.2...v1.5.0) (2025-10-31)
+
+
+### Features
+
+* **observability:** add exemplars, exponential histograms, and configurable sampling ([9f20831](https://github.com/Smana/image-gallery/commit/9f20831d8287d26a100a560da1ada3f23cbb793a))
+* **observability:** add exemplars, exponential histograms, and configurable sampling ([04e46e2](https://github.com/Smana/image-gallery/commit/04e46e2e1d93d2bd4fcd52f3f1fb25cd1702e5c1))
+
 ## [1.4.2](https://github.com/Smana/image-gallery/compare/v1.4.1...v1.4.2) (2025-10-30)
 
 
