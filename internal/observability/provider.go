@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -11,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/exemplar"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -97,6 +99,12 @@ func initTracerProvider(ctx context.Context, res *resource.Resource, config Conf
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
 
+	// Create sampler based on configuration
+	sampler, err := createSampler(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sampler: %w", err)
+	}
+
 	// Create tracer provider with batch span processor
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
@@ -104,10 +112,38 @@ func initTracerProvider(ctx context.Context, res *resource.Resource, config Conf
 			sdktrace.WithBatchTimeout(5*time.Second),
 			sdktrace.WithMaxExportBatchSize(512),
 		),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()), // Sample all traces for demo
+		sdktrace.WithSampler(sampler),
 	)
 
 	return tp, nil
+}
+
+// createSampler creates a trace sampler based on configuration
+func createSampler(config Config) (sdktrace.Sampler, error) {
+	switch config.TracesSampler {
+	case SamplerAlwaysOn:
+		return sdktrace.AlwaysSample(), nil
+	case SamplerAlwaysOff:
+		return sdktrace.NeverSample(), nil
+	case SamplerTraceIDRatio:
+		ratio, err := strconv.ParseFloat(config.TracesSamplerArg, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid sampler arg: %w", err)
+		}
+		return sdktrace.TraceIDRatioBased(ratio), nil
+	case SamplerParentBasedAlwaysOn:
+		return sdktrace.ParentBased(sdktrace.AlwaysSample()), nil
+	case SamplerParentBasedAlwaysOff:
+		return sdktrace.ParentBased(sdktrace.NeverSample()), nil
+	case SamplerParentBasedTraceIDRatio:
+		ratio, err := strconv.ParseFloat(config.TracesSamplerArg, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid sampler arg: %w", err)
+		}
+		return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio)), nil
+	default:
+		return nil, fmt.Errorf("unknown sampler type: %s", config.TracesSampler)
+	}
 }
 
 // initMeterProvider creates and configures a meter provider with OTLP exporter
@@ -121,15 +157,34 @@ func initMeterProvider(ctx context.Context, res *resource.Resource, config Confi
 		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
 	}
 
-	// Create meter provider with periodic reader
+	// Create meter provider with periodic reader, exemplar filter, and views for exponential histograms
 	mp := sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(res),
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter,
 			sdkmetric.WithInterval(30*time.Second), // Export metrics every 30 seconds
 		)),
+		// Enable trace-based exemplar sampling - only samples measurements from sampled traces
+		sdkmetric.WithExemplarFilter(exemplar.TraceBasedFilter),
+		// Configure exponential histograms for all histogram metrics
+		sdkmetric.WithView(createExponentialHistogramView()),
 	)
 
 	return mp, nil
+}
+
+// createExponentialHistogramView creates a view that converts all histograms to exponential histograms with exemplars
+func createExponentialHistogramView() sdkmetric.View {
+	return sdkmetric.NewView(
+		// Match all histogram instruments (ending with .duration, .size, etc.)
+		sdkmetric.Instrument{Kind: sdkmetric.InstrumentKindHistogram},
+		// Convert to exponential histogram with bucket-based exemplar reservoir
+		sdkmetric.Stream{
+			Aggregation: sdkmetric.AggregationBase2ExponentialHistogram{
+				MaxSize:  160, // Maximum number of buckets (default: 160)
+				MaxScale: 20,  // Maximum scale factor (default: 20, range: -10 to 20)
+			},
+		},
+	)
 }
 
 // Tracer returns a tracer for the given instrumentation scope

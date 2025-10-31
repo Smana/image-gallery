@@ -137,6 +137,8 @@ OTEL_SERVICE_VERSION=1.3.0
 OTEL_DEPLOYMENT_ENVIRONMENT=development
 OTEL_TRACES_ENABLED=true
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=localhost:4318
+OTEL_TRACES_SAMPLER=always_on                    # Sample 100% of traces (development default)
+OTEL_TRACES_SAMPLER_ARG=1.0                      # Sampling ratio (only used with ratio-based samplers)
 OTEL_METRICS_ENABLED=true
 OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=localhost:4318
 LOG_LEVEL=info
@@ -150,6 +152,8 @@ OTEL_SERVICE_VERSION=1.3.0
 OTEL_DEPLOYMENT_ENVIRONMENT=production
 OTEL_TRACES_ENABLED=true
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=victoriametrics-victoria-logs-single-server:4318
+OTEL_TRACES_SAMPLER=parentbased_traceidratio     # Parent-based sampling with 10% ratio (production recommended)
+OTEL_TRACES_SAMPLER_ARG=0.1                      # Sample 10% of traces
 OTEL_METRICS_ENABLED=true
 OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=vmagent:8429
 LOG_LEVEL=info
@@ -171,7 +175,10 @@ LOG_FORMAT=json
 - Metrics: `storage.operations.total`, `storage.operation.duration`, `storage.bytes.transferred`
 
 **Infrastructure Layer**
-- Database query tracing (via repository pattern)
+- Database query tracing with automatic PostgreSQL instrumentation via `otelsql`
+  - Automatic span creation for all SQL queries (SELECT, INSERT, UPDATE, DELETE)
+  - Semantic conventions: `db.system`, `db.statement`, `db.operation`
+  - Connection pool metrics: `db.client.connections.usage`, `db.client.connections.max`
 - Storage operation tracing (MinIO/S3)
 - Cache operation tracing (Valkey/Redis)
 
@@ -198,6 +205,62 @@ LOG_FORMAT=json
 - `storage.operations.total` - Storage operations by type
 - `storage.operation.duration` - Storage operation latency
 - `storage.bytes.transferred` - Data transfer volume
+
+**Database Metrics (Connection Pool):**
+- `db.client.connections.usage` - Current number of connections in use
+- `db.client.connections.idle` - Number of idle connections
+- `db.client.connections.max` - Maximum allowed connections
+- `db.client.connections.wait_time` - Time waiting for a connection
+
+#### Exemplars: Connecting Metrics to Traces
+
+The application uses **OpenTelemetry Exemplars** to create powerful correlations between metrics and traces. Exemplars are sample data points attached to histogram metrics that include trace_id and span_id references.
+
+**How It Works:**
+1. All histogram metrics (`*.duration`, `*.size`) use **exponential histograms** for better precision
+2. When a histogram measurement is recorded within a traced operation, an **exemplar** is automatically captured
+3. The exemplar includes the trace_id and span_id of the active span
+4. In VictoriaMetrics/Grafana, you can click on an exemplar to jump directly to the trace
+
+**Exemplar Configuration:**
+- **Filter**: `TraceBasedFilter` - Only samples measurements from traced requests
+- **Reservoir**: Histogram bucket-based - Stores one exemplar per histogram bucket
+- **Automatic**: No code changes needed - works automatically when metrics are recorded within spans
+
+**Example Use Cases:**
+- **Slow Request Investigation**: See a spike in `http.server.request.duration`? Click the exemplar to view the exact slow trace
+- **Failed Upload Debugging**: High error rate in `image.uploads.total`? Jump to failing traces instantly
+- **Storage Performance**: Identify specific slow S3 operations via `storage.operation.duration` exemplars
+
+**Histogram Type: Exponential Histograms**
+- Auto-adjusting bucket boundaries based on observed values
+- Better precision for tail latencies (p95, p99)
+- Smaller data size compared to explicit bucket histograms
+- Fully supported by VictoriaMetrics and Prometheus
+
+#### Trace Sampling Strategies
+
+The application supports multiple sampling strategies via environment variables:
+
+**Available Samplers:**
+- `always_on` - Sample 100% of traces (default for development)
+- `always_off` - Disable tracing completely
+- `traceidratio` - Sample a percentage based on trace ID (e.g., 0.1 = 10%)
+- `parentbased_always_on` - Respect parent span sampling, default to sampling
+- `parentbased_always_off` - Respect parent span sampling, default to not sampling
+- `parentbased_traceidratio` - Respect parent span, use ratio for root spans (recommended for production)
+
+**Production Recommendation:**
+Use `parentbased_traceidratio` with a 10% sampling rate:
+```bash
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1
+```
+
+This ensures:
+- Child spans respect parent sampling decisions (maintains complete traces)
+- Root spans are sampled at 10% (reduces costs while maintaining coverage)
+- Exemplars still work even with sampling (metrics remain accurate)
 
 #### Example Queries
 
@@ -229,11 +292,14 @@ service.name="image-gallery" AND name="GetImage"
 ```
 
 #### Observability Best Practices
-- **Context Propagation**: Trace context automatically propagated through all layers
-- **Semantic Conventions**: Following OpenTelemetry semantic conventions for HTTP, storage
+- **Context Propagation**: Trace context automatically propagated through all layers (HTTP → Service → Database)
+- **Semantic Conventions**: Following OpenTelemetry semantic conventions for HTTP, database, and storage
+- **Exemplars**: Automatic trace correlation via histogram exemplars - no code changes needed
+- **Exponential Histograms**: Better precision and smaller payload size compared to fixed-bucket histograms
+- **Database Instrumentation**: Automatic PostgreSQL query tracing with `otelsql` wrapper
 - **Graceful Degradation**: Observability failures don't impact application functionality
 - **Resource Detection**: Automatic service name, version, environment detection
-- **Sampling**: Currently set to AlwaysSample for demo; configure for production
+- **Sampling**: Configurable via environment variables (default: 100% for development, recommend 10% for production)
 - **Batching**: Traces batched every 5s, metrics exported every 30s
 - **Shutdown**: Graceful shutdown with ForceFlush before exit
 
