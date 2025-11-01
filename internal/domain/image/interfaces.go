@@ -55,6 +55,9 @@ type TagRepository interface {
 	// GetPopularTags returns the most frequently used tags
 	GetPopularTags(ctx context.Context, limit int) ([]*Tag, error)
 
+	// GetPredefinedTags returns all predefined tags
+	GetPredefinedTags(ctx context.Context) ([]*Tag, error)
+
 	// ExistsByName checks if a tag with the given name exists
 	ExistsByName(ctx context.Context, name string) (bool, error)
 }
@@ -172,6 +175,9 @@ type TagService interface {
 
 	// GetPopularTags returns frequently used tags
 	GetPopularTags(ctx context.Context, limit int) ([]*Tag, error)
+
+	// GetPredefinedTags returns all predefined tags
+	GetPredefinedTags(ctx context.Context) ([]*Tag, error)
 
 	// DeleteTag removes a tag
 	DeleteTag(ctx context.Context, id int) error

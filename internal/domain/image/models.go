@@ -53,9 +53,11 @@ type UpdateImageRequest struct {
 
 // ListImagesRequest represents a request to list images
 type ListImagesRequest struct {
-	Page     int    `json:"page" form:"page" validate:"min=1"`
-	PageSize int    `json:"page_size" form:"page_size" validate:"min=1,max=100"`
-	Tag      string `json:"tag" form:"tag" validate:"omitempty,max=100"`
+	Page     int      `json:"page" form:"page" validate:"min=1"`
+	PageSize int      `json:"page_size" form:"page_size" validate:"min=1,max=100"`
+	Tag      string   `json:"tag" form:"tag" validate:"omitempty,max=100"` // Single tag filter (deprecated, use Tags)
+	Tags     []string `json:"tags" form:"tags"`                            // Multiple tag filters
+	MatchAll bool     `json:"match_all" form:"match_all"`                  // true = AND logic, false = OR logic (default)
 }
 
 // ListImagesResponse represents the response for listing images

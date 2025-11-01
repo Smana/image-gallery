@@ -174,10 +174,44 @@ func (s *StorageServiceImpl) Retrieve(ctx context.Context, path string) (io.Read
 
 // Delete removes a file from storage
 func (s *StorageServiceImpl) Delete(ctx context.Context, path string) error {
+	startTime := time.Now()
+	ctx, span := s.tracer.Start(ctx, "Delete",
+		trace.WithAttributes(
+			attribute.String("storage.path", path),
+		),
+	)
+	defer span.End()
+
+	var err error
 	if s.service != nil {
-		return s.service.Delete(ctx, path)
+		err = s.service.Delete(ctx, path)
+	} else {
+		err = s.client.DeleteFile(ctx, path)
 	}
-	return s.client.DeleteFile(ctx, path)
+
+	// Record metrics
+	duration := time.Since(startTime).Seconds()
+	attrs := []attribute.KeyValue{
+		attribute.String("operation", "delete"),
+	}
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "delete failed")
+		attrs = append(attrs, attribute.String("status", "error"))
+	} else {
+		span.SetStatus(codes.Ok, "")
+		attrs = append(attrs, attribute.String("status", "success"))
+	}
+
+	if s.storageOperationsCounter != nil {
+		s.storageOperationsCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+	if s.storageOperationsDuration != nil {
+		s.storageOperationsDuration.Record(ctx, duration, metric.WithAttributes(attrs...))
+	}
+
+	return err
 }
 
 // Exists checks if a file exists in storage

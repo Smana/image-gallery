@@ -51,6 +51,11 @@ func (s *TagServiceImpl) GetPopularTags(ctx context.Context, limit int) ([]*imag
 	return s.tagRepo.GetPopularTags(ctx, limit)
 }
 
+// GetPredefinedTags returns all predefined tags
+func (s *TagServiceImpl) GetPredefinedTags(ctx context.Context) ([]*image.Tag, error) {
+	return s.tagRepo.GetPredefinedTags(ctx)
+}
+
 // DeleteTag removes a tag
 func (s *TagServiceImpl) DeleteTag(ctx context.Context, id int) error {
 	// TODO: Implement tag deletion workflow

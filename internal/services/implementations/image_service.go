@@ -8,6 +8,7 @@ import (
 	"io"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"image-gallery/internal/domain/image"
@@ -30,11 +31,13 @@ type ImageServiceImpl struct {
 	cache     image.CacheService   // can be nil
 
 	// Observability
-	tracer              trace.Tracer
-	imageUploadCounter  metric.Int64Counter
-	imageProcessingTime metric.Float64Histogram
-	cacheHitCounter     metric.Int64Counter
-	cacheMissCounter    metric.Int64Counter
+	tracer               trace.Tracer
+	imageUploadCounter   metric.Int64Counter
+	imageProcessingTime  metric.Float64Histogram
+	imageDeletionCounter metric.Int64Counter
+	imageDeletionTime    metric.Float64Histogram
+	cacheHitCounter      metric.Int64Counter
+	cacheMissCounter     metric.Int64Counter
 }
 
 // NewImageService creates a new image service implementation
@@ -87,19 +90,39 @@ func NewImageService(
 		cacheMissCounter = nil
 	}
 
+	deletionCounter, err := meter.Int64Counter(
+		"image.deletions.total",
+		metric.WithDescription("Total number of image deletions"),
+		metric.WithUnit("{deletion}"),
+	)
+	if err != nil {
+		deletionCounter = nil
+	}
+
+	deletionTime, err := meter.Float64Histogram(
+		"image.deletion.duration",
+		metric.WithDescription("Duration of image deletion operations"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		deletionTime = nil
+	}
+
 	return &ImageServiceImpl{
-		imageRepo:           imageRepo,
-		tagRepo:             tagRepo,
-		storage:             storage,
-		processor:           processor,
-		validator:           validator,
-		eventPub:            eventPub,
-		cache:               cache,
-		tracer:              tracer,
-		imageUploadCounter:  uploadCounter,
-		imageProcessingTime: processingTime,
-		cacheHitCounter:     cacheHitCounter,
-		cacheMissCounter:    cacheMissCounter,
+		imageRepo:            imageRepo,
+		tagRepo:              tagRepo,
+		storage:              storage,
+		processor:            processor,
+		validator:            validator,
+		eventPub:             eventPub,
+		cache:                cache,
+		tracer:               tracer,
+		imageUploadCounter:   uploadCounter,
+		imageProcessingTime:  processingTime,
+		imageDeletionCounter: deletionCounter,
+		imageDeletionTime:    deletionTime,
+		cacheHitCounter:      cacheHitCounter,
+		cacheMissCounter:     cacheMissCounter,
 	}
 }
 
@@ -387,8 +410,21 @@ func generateListCacheKey(req *image.ListImagesRequest) string {
 		return "list_default"
 	}
 
-	return fmt.Sprintf("list_page_%d_pagesize_%d_tag_%s",
-		req.Page, req.PageSize, req.Tag)
+	// Include Tags array and MatchAll in cache key
+	var tagsKey string
+	if len(req.Tags) > 0 {
+		tagsKey = strings.Join(req.Tags, ",")
+	} else if req.Tag != "" {
+		tagsKey = req.Tag
+	}
+
+	matchAllKey := "any"
+	if req.MatchAll {
+		matchAllKey = "all"
+	}
+
+	return fmt.Sprintf("list_page_%d_pagesize_%d_tags_%s_match_%s",
+		req.Page, req.PageSize, tagsKey, matchAllKey)
 }
 
 // UpdateImage modifies an existing image
@@ -445,23 +481,76 @@ func (s *ImageServiceImpl) handlePostUpdate(ctx context.Context, id int, img *im
 
 // DeleteImage removes an image and its associated files
 func (s *ImageServiceImpl) DeleteImage(ctx context.Context, id int) error {
+	startTime := time.Now()
+
+	// Create span for deletion operation
+	ctx, span := s.tracer.Start(ctx, "DeleteImage",
+		trace.WithAttributes(
+			attribute.Int("image.id", id),
+		),
+	)
+	defer span.End()
+
+	span.AddEvent("validating_deletion")
 	if err := s.validator.ValidateImageDeletion(ctx, id); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "validation failed")
+		s.recordDeletionMetrics(ctx, time.Since(startTime).Seconds(), "error", "validation_failed")
 		return fmt.Errorf("deletion validation failed: %w", err)
 	}
 
+	span.AddEvent("fetching_image_metadata")
 	img, err := s.imageRepo.GetByID(ctx, id)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "image not found")
+		s.recordDeletionMetrics(ctx, time.Since(startTime).Seconds(), "error", "not_found")
 		return fmt.Errorf("failed to get image for deletion: %w", err)
 	}
 
+	span.SetAttributes(
+		attribute.String("image.filename", img.Filename),
+		attribute.String("image.storage_path", img.StoragePath),
+		attribute.String("image.content_type", img.ContentType),
+		attribute.Int64("image.size", img.FileSize),
+	)
+
+	span.AddEvent("deleting_from_database")
 	if err := s.imageRepo.Delete(ctx, id); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "database deletion failed")
+		s.recordDeletionMetrics(ctx, time.Since(startTime).Seconds(), "error", "database_failed")
 		return fmt.Errorf("failed to delete image from database: %w", err)
 	}
 
+	span.AddEvent("cleaning_up_storage")
 	s.cleanupStorage(ctx, img.StoragePath)
+
+	span.AddEvent("post_deletion_cleanup")
 	s.handlePostDeletion(ctx, id)
 
+	span.SetStatus(codes.Ok, "")
+	span.AddEvent("deletion_completed")
+
+	s.recordDeletionMetrics(ctx, time.Since(startTime).Seconds(), "success", "")
+
 	return nil
+}
+
+func (s *ImageServiceImpl) recordDeletionMetrics(ctx context.Context, duration float64, status string, errorType string) {
+	attrs := []attribute.KeyValue{
+		attribute.String("status", status),
+	}
+	if errorType != "" {
+		attrs = append(attrs, attribute.String("error_type", errorType))
+	}
+
+	if s.imageDeletionTime != nil {
+		s.imageDeletionTime.Record(ctx, duration, metric.WithAttributes(attrs...))
+	}
+	if s.imageDeletionCounter != nil {
+		s.imageDeletionCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
 }
 
 func (s *ImageServiceImpl) cleanupStorage(ctx context.Context, storagePath string) {

@@ -11,12 +11,21 @@ import (
 
 // ImageRepositoryAdapter adapts database ImageRepository to domain Repository interface
 type ImageRepositoryAdapter struct {
-	dbRepo database.ImageRepository
+	dbRepo  database.ImageRepository
+	tagRepo database.TagRepository
 }
 
 // NewImageRepositoryAdapter creates a domain repository adapter
 func NewImageRepositoryAdapter(dbRepo database.ImageRepository) image.Repository {
-	return &ImageRepositoryAdapter{dbRepo: dbRepo}
+	return &ImageRepositoryAdapter{
+		dbRepo:  dbRepo,
+		tagRepo: nil, // Will be set later if needed
+	}
+}
+
+// SetTagRepository sets the tag repository for handling tag relationships
+func (a *ImageRepositoryAdapter) SetTagRepository(tagRepo database.TagRepository) {
+	a.tagRepo = tagRepo
 }
 
 func (a *ImageRepositoryAdapter) Create(ctx context.Context, img *image.Image) error {
@@ -50,6 +59,18 @@ func (a *ImageRepositoryAdapter) Create(ctx context.Context, img *image.Image) e
 	img.UpdatedAt = dbImage.UpdatedAt
 	img.UploadedAt = dbImage.UploadedAt
 
+	// Save tag associations if tags are provided
+	if a.tagRepo != nil && len(img.Tags) > 0 {
+		for _, tag := range img.Tags {
+			if err := a.tagRepo.AddToImage(ctx, img.ID, tag.ID); err != nil {
+				// If tag attachment fails, we should consider rolling back
+				// For now, we'll log but continue
+				// TODO: Consider transaction handling
+				return fmt.Errorf("failed to attach tag %s to image: %w", tag.Name, err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -69,23 +90,34 @@ func (a *ImageRepositoryAdapter) GetByID(ctx context.Context, id int) (*image.Im
 }
 
 func (a *ImageRepositoryAdapter) List(ctx context.Context, req *image.ListImagesRequest) (*image.ListImagesResponse, error) {
-	if req.Tag != "" {
-		// Use tag-specific search
+	// Determine which tags to filter by (prioritize Tags array over single Tag)
+	var tagFilters []string
+	if len(req.Tags) > 0 {
+		tagFilters = req.Tags
+	} else if req.Tag != "" {
+		tagFilters = []string{req.Tag}
+	}
+
+	// Handle tag-based filtering
+	if len(tagFilters) > 0 {
 		pagination := database.PaginationParams{
 			Limit:  req.PageSize,
 			Offset: req.GetOffset(),
 		}
 
-		tags := []string{req.Tag}
-		dbImages, err := a.dbRepo.GetByTags(ctx, tags, false, pagination)
+		// Use GetByTags with matchAll parameter
+		dbImages, err := a.dbRepo.GetByTags(ctx, tagFilters, req.MatchAll, pagination)
 		if err != nil {
 			return nil, err
 		}
 
-		// Get total count for this tag
-		count, err := a.CountByTag(ctx, req.Tag)
-		if err != nil {
-			return nil, err
+		// For count, we need to get all matching images (this is simplified)
+		// TODO: Add a dedicated count method for tag filtering in repository
+		count := len(dbImages)
+		if len(dbImages) == pagination.Limit {
+			// If we got exactly the limit, there might be more
+			// This is an approximation - proper implementation would use COUNT query
+			count = pagination.Limit * req.Page
 		}
 
 		images := make([]image.Image, len(dbImages))
@@ -111,11 +143,12 @@ func (a *ImageRepositoryAdapter) List(ctx context.Context, req *image.ListImages
 	}
 
 	sort := database.SortParams{
-		Field: "created_at",
+		Field: "uploaded_at",
 		Order: "DESC",
 	}
 
-	dbImages, err := a.dbRepo.List(ctx, pagination, sort)
+	// Use GetWithTags to load tags with images
+	dbImages, err := a.dbRepo.GetWithTags(ctx, pagination, sort)
 	if err != nil {
 		return nil, err
 	}

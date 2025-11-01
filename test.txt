@@ -1,0 +1,31 @@
+  🚀 How to Test Locally
+
+  # 1. Start infrastructure
+  docker-compose up -d
+
+  # 2. Run migrations
+  make migrate
+
+  # 3. Start the application
+  make dev
+
+  # 4. Open browser
+  http://localhost:8080/gallery
+
+  # 5. Test upload:
+  #    - Select multiple images
+  #    - Add tags: "vacation, sunset, beach"
+  #    - Click "Upload Images"
+  #    - Verify gallery refreshes with new images showing metadata
+
+  🧪 Running Tests
+
+  # Unit tests (no Docker required)
+  go test ./internal/web/handlers -v
+
+  # Integration tests (requires Docker)
+  make test
+
+  # CI tests via Dagger (requires Docker)
+  dagger call test
+
