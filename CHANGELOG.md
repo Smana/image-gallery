@@ -5,6 +5,21 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/Smana/image-gallery/compare/v1.5.3...v1.6.0) (2025-11-01)
+
+
+### Features
+
+* add user settings and upload handler with tag filtering system ([33a4aa7](https://github.com/Smana/image-gallery/commit/33a4aa779ce9641c6233f999936794836acfaf32))
+* add user settings and upload handler with tag filtering system ([5f9d9a2](https://github.com/Smana/image-gallery/commit/5f9d9a227e92b549ee6bb0065030601789969854))
+
+
+### Bug Fixes
+
+* **tests:** correct sort field to uploaded_at in mock expectation ([23dbc13](https://github.com/Smana/image-gallery/commit/23dbc1357332febd1a3a43c62c47b43267906f67))
+* **tests:** remove duplicate GetByTags mock call ([ce9d6c6](https://github.com/Smana/image-gallery/commit/ce9d6c638ec75d8519ada1fa53e889a0a57aeb4b))
+* **tests:** update mock expectation for GetWithTags ([73e6367](https://github.com/Smana/image-gallery/commit/73e6367204a28b5da684c1d687232f72a4981c7b))
+
 ## [1.5.3](https://github.com/Smana/image-gallery/compare/v1.5.2...v1.5.3) (2025-10-31)
 
 
