@@ -294,7 +294,7 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 			Order: "DESC",
 		}
 
-		mockDB.On("List", ctx, expectedPagination, expectedSort).Return(dbImages, nil)
+		mockDB.On("GetWithTags", ctx, expectedPagination, expectedSort).Return(dbImages, nil)
 		mockDB.On("Count", ctx).Return(2, nil)
 
 		// When: Listing images without tag filter
