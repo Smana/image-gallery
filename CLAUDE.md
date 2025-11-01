@@ -353,3 +353,4 @@ GITHUB_REPOSITORY=Smana/image-gallery GITHUB_REPOSITORY_OWNER=Smana GITHUB_REPOS
 ```
 
 The release command builds binaries, creates Docker images, and prepares archives - exactly matching the build-push workflow.
+- always run make lint after a change

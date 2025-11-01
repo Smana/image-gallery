@@ -59,7 +59,7 @@ func (r *SettingsRepositoryImpl) GetByUserID(ctx context.Context, userID *string
 	return &s, nil
 }
 
-// GetDefault retrieves the default settings record (user_id = NULL)
+// GetDefault retrieves the default settings record (user_id = 'default')
 func (r *SettingsRepositoryImpl) GetDefault(ctx context.Context) (*settings.UserSettings, error) {
 	query := `
 		SELECT id, user_id, background_image_id, background_image_url,
@@ -67,7 +67,7 @@ func (r *SettingsRepositoryImpl) GetDefault(ctx context.Context) (*settings.User
 		       show_tags, show_dimensions, show_content_type, grid_columns,
 		       created_at, updated_at
 		FROM user_settings
-		WHERE user_id IS NULL
+		WHERE user_id = 'default'
 		LIMIT 1
 	`
 
