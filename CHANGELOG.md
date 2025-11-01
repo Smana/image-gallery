@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1](https://github.com/Smana/image-gallery/compare/v1.6.0...v1.6.1) (2025-11-01)
+
+
+### Bug Fixes
+
+* **main:** bug in defining default user-id ([7bc8def](https://github.com/Smana/image-gallery/commit/7bc8def460b1402351e5b0b66fd63286daa5cf00))
+* **main:** bug in defining default user-id ([a688bbc](https://github.com/Smana/image-gallery/commit/a688bbc73ebf3e6b5816f1dbd7fe25a8213b1498))
+
 ## [1.6.0](https://github.com/Smana/image-gallery/compare/v1.5.3...v1.6.0) (2025-11-01)
 
 
