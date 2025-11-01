@@ -290,7 +290,7 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 			Offset: req.GetOffset(),
 		}
 		expectedSort := database.SortParams{
-			Field: "created_at",
+			Field: "uploaded_at",
 			Order: "DESC",
 		}
 
