@@ -51,6 +51,10 @@ type TagRepository interface {
 	GetPopular(ctx context.Context, limit int) ([]*Tag, error)
 	GetWithImageCount(ctx context.Context, pagination PaginationParams) ([]*Tag, error)
 
+	// Predefined tags
+	GetPredefined(ctx context.Context) ([]*Tag, error)
+	GetPredefinedByCategory(ctx context.Context) (map[string][]*Tag, error)
+
 	// Statistics
 	Count(ctx context.Context) (int, error)
 

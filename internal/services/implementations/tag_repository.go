@@ -7,17 +7,20 @@ import (
 	"time"
 
 	"image-gallery/internal/domain/image"
+	"image-gallery/internal/platform/database"
 )
 
 // TagRepositoryImpl implements the image.TagRepository interface
 type TagRepositoryImpl struct {
-	db *sql.DB
+	db        *sql.DB
+	dbTagRepo database.TagRepository
 }
 
 // NewTagRepository creates a new tag repository implementation
 func NewTagRepository(db *sql.DB) image.TagRepository {
 	return &TagRepositoryImpl{
-		db: db,
+		db:        db,
+		dbTagRepo: database.NewTagRepository(db),
 	}
 }
 
@@ -129,4 +132,25 @@ func (r *TagRepositoryImpl) GetPopularTags(ctx context.Context, limit int) ([]*i
 func (r *TagRepositoryImpl) ExistsByName(ctx context.Context, name string) (bool, error) {
 	// TODO: Implement existence check
 	return false, nil
+}
+
+// GetPredefinedTags returns all predefined tags
+func (r *TagRepositoryImpl) GetPredefinedTags(ctx context.Context) ([]*image.Tag, error) {
+	// Get predefined tags from database layer
+	dbTags, err := r.dbTagRepo.GetPredefined(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get predefined tags: %w", err)
+	}
+
+	// Convert database tags to domain tags
+	domainTags := make([]*image.Tag, len(dbTags))
+	for i, dbTag := range dbTags {
+		domainTags[i] = &image.Tag{
+			ID:        dbTag.ID,
+			Name:      dbTag.Name,
+			CreatedAt: dbTag.CreatedAt,
+		}
+	}
+
+	return domainTags, nil
 }

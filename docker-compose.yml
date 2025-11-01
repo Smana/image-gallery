@@ -47,6 +47,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: image-gallery-app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - GO_ENV=development
       - PORT=8080

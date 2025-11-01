@@ -245,6 +245,52 @@ func (r *RedisClient) FlushCache(ctx context.Context) error {
 	return nil
 }
 
+// Generic cache methods for any type
+
+// Get retrieves a cached value by key and unmarshals it into result
+func (r *RedisClient) Get(ctx context.Context, key string, result interface{}) error {
+	val, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return fmt.Errorf("key not found in cache")
+		}
+		return fmt.Errorf("failed to get from cache: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(val), result); err != nil {
+		return fmt.Errorf("failed to unmarshal cached value: %w", err)
+	}
+
+	return nil
+}
+
+// Set caches a value with the specified key and TTL
+func (r *RedisClient) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("failed to marshal value: %w", err)
+	}
+
+	if ttl == 0 {
+		ttl = r.defaultTTL
+	}
+
+	if err := r.client.Set(ctx, key, data, ttl).Err(); err != nil {
+		return fmt.Errorf("failed to cache value: %w", err)
+	}
+
+	return nil
+}
+
+// Delete removes a value from cache by key
+func (r *RedisClient) Delete(ctx context.Context, key string) error {
+	if err := r.client.Del(ctx, key).Err(); err != nil {
+		return fmt.Errorf("failed to delete from cache: %w", err)
+	}
+
+	return nil
+}
+
 // GenerateListKey generates a consistent cache key for image lists
 func GenerateListKey(req *image.ListImagesRequest) string {
 	return fmt.Sprintf("page_%d_pagesize_%d_tag_%s",

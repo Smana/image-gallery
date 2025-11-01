@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // imageRepository implements ImageRepository interface
@@ -499,7 +501,7 @@ func (r *imageRepository) GetByTags(ctx context.Context, tags []string, matchAll
 	pagination.Validate()
 
 	var query string
-	args := []interface{}{tags, pagination.Limit, pagination.Offset}
+	args := []interface{}{pq.Array(tags), pagination.Limit, pagination.Offset}
 
 	if matchAll {
 		// Images must have ALL specified tags

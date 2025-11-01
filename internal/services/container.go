@@ -6,6 +6,7 @@ import (
 
 	"image-gallery/internal/config"
 	"image-gallery/internal/domain/image"
+	"image-gallery/internal/domain/settings"
 	"image-gallery/internal/observability"
 	"image-gallery/internal/platform/cache"
 	"image-gallery/internal/platform/database"
@@ -28,18 +29,21 @@ type Container struct {
 	storageService image.StorageService
 
 	// Repositories
-	imageRepository image.Repository
-	tagRepository   image.TagRepository
+	imageRepository    image.Repository
+	tagRepository      image.TagRepository
+	settingsRepository settings.Repository
 
 	// Services
 	imageService      image.ImageService
 	tagService        image.TagService
+	settingsService   settings.SettingsService
 	imageProcessor    image.ImageProcessor
 	validationService image.ValidationService
 
 	// Infrastructure services (optional - can be nil for now)
 	eventPublisher      image.EventPublisher
 	cacheService        image.CacheService
+	redisClient         *cache.RedisClient // Direct access to Redis for generic caching
 	searchService       image.SearchService
 	auditService        image.AuditService
 	notificationService image.NotificationService
@@ -98,10 +102,17 @@ func NewContainerForTest(testCfg *TestConfig, db *sql.DB, storageClient *storage
 func (c *Container) initializeServices() error {
 	// Initialize database repositories first
 	dbImageRepo := database.NewImageRepository(c.db)
+	dbTagRepo := database.NewTagRepository(c.db)
 
 	// Initialize domain repository adapters
-	c.imageRepository = implementations.NewImageRepositoryAdapter(dbImageRepo)
+	imageRepoAdapter := implementations.NewImageRepositoryAdapter(dbImageRepo)
+	// Set tag repository on image adapter so it can save tag associations
+	if adapter, ok := imageRepoAdapter.(interface{ SetTagRepository(database.TagRepository) }); ok {
+		adapter.SetTagRepository(dbTagRepo)
+	}
+	c.imageRepository = imageRepoAdapter
 	c.tagRepository = implementations.NewTagRepository(c.db)
+	c.settingsRepository = implementations.NewSettingsRepository(c.db)
 
 	// Initialize infrastructure services
 	// Try to create full storage service, fallback to MinIOClient wrapper
@@ -117,14 +128,17 @@ func (c *Container) initializeServices() error {
 	// Initialize cache service (optional)
 	if c.config.Cache.Enabled {
 		if redisClient, err := cache.NewRedisClient(c.config.Cache); err == nil {
+			c.redisClient = redisClient // Store Redis client for generic caching
 			c.cacheService = implementations.NewCacheService(redisClient)
 			log.Println("Cache service initialized with Valkey/Redis")
 		} else {
 			log.Printf("Failed to initialize cache service: %v", err)
+			c.redisClient = nil
 			c.cacheService = nil
 		}
 	} else {
 		log.Println("Cache service disabled")
+		c.redisClient = nil
 		c.cacheService = nil
 	}
 
@@ -149,6 +163,11 @@ func (c *Container) initializeServices() error {
 		c.tagRepository,
 		c.validationService,
 		c.eventPublisher,
+	)
+
+	c.settingsService = implementations.NewSettingsService(
+		c.settingsRepository,
+		c.redisClient,
 	)
 
 	log.Println("Dependency injection container initialized successfully")
@@ -187,6 +206,14 @@ func (c *Container) ImageService() image.ImageService {
 
 func (c *Container) TagService() image.TagService {
 	return c.tagService
+}
+
+func (c *Container) SettingsRepository() settings.Repository {
+	return c.settingsRepository
+}
+
+func (c *Container) SettingsService() settings.SettingsService {
+	return c.settingsService
 }
 
 func (c *Container) ImageProcessor() image.ImageProcessor {

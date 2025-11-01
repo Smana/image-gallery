@@ -323,6 +323,59 @@ func (r *tagRepository) CountTagImages(ctx context.Context, tagID int) (int, err
 	return count, err
 }
 
+// GetPredefined retrieves all active predefined tags ordered by display_order and name
+func (r *tagRepository) GetPredefined(ctx context.Context) ([]*Tag, error) {
+	query := `
+		SELECT id, name, description, color, created_at
+		FROM tags
+		WHERE is_predefined = true AND is_active = true
+		ORDER BY display_order ASC, name ASC
+	`
+	return r.scanTags(ctx, query)
+}
+
+// GetPredefinedByCategory retrieves predefined tags grouped by category
+func (r *tagRepository) GetPredefinedByCategory(ctx context.Context) (map[string][]*Tag, error) {
+	query := `
+		SELECT id, name, description, color, created_at, category
+		FROM tags
+		WHERE is_predefined = true AND is_active = true
+		ORDER BY category ASC, display_order ASC, name ASC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }() //nolint:errcheck // Resource cleanup
+
+	tagsByCategory := make(map[string][]*Tag)
+	for rows.Next() {
+		tag := &Tag{}
+		var category sql.NullString
+		err := rows.Scan(
+			&tag.ID,
+			&tag.Name,
+			&tag.Description,
+			&tag.Color,
+			&tag.CreatedAt,
+			&category,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		cat := "other"
+		if category.Valid {
+			cat = category.String
+		}
+
+		tagsByCategory[cat] = append(tagsByCategory[cat], tag)
+	}
+
+	return tagsByCategory, rows.Err()
+}
+
 // scanTags is a helper method to scan multiple tag records
 func (r *tagRepository) scanTags(ctx context.Context, query string, args ...interface{}) ([]*Tag, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)

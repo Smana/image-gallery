@@ -290,11 +290,11 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 			Offset: req.GetOffset(),
 		}
 		expectedSort := database.SortParams{
-			Field: "created_at",
+			Field: "uploaded_at",
 			Order: "DESC",
 		}
 
-		mockDB.On("List", ctx, expectedPagination, expectedSort).Return(dbImages, nil)
+		mockDB.On("GetWithTags", ctx, expectedPagination, expectedSort).Return(dbImages, nil)
 		mockDB.On("Count", ctx).Return(2, nil)
 
 		// When: Listing images without tag filter
@@ -348,15 +348,8 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 		}
 		expectedTags := []string{"nature"}
 
-		// Mock both calls - one for listing, one for counting
+		// Mock GetByTags call (only one call now - count is derived from results)
 		mockDB.On("GetByTags", ctx, expectedTags, false, expectedPagination).Return(dbImages, nil)
-
-		// Mock the CountByTag call with the expected pagination for counting
-		countPagination := database.PaginationParams{
-			Limit:  1000, // As per our CountByTag implementation
-			Offset: 0,
-		}
-		mockDB.On("GetByTags", ctx, expectedTags, false, countPagination).Return(dbImages, nil)
 
 		// When: Listing images with tag filter
 		response, err := adapter.List(ctx, req)
