@@ -5,6 +5,8 @@ configMapGenerator:
   - name: atlas-db-migrations
     files:
       - ./001_initial_schema.sql
+      - ./002_add_user_settings.sql
+      - ./003_predefined_tags.sql
       - atlas.sum
     options:
       disableNameSuffixHash: true
