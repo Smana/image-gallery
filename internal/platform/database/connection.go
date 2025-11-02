@@ -45,9 +45,9 @@ func NewConnection(dbURL string) (*sql.DB, error) {
 	}
 
 	// Configure connection pool limits to prevent resource exhaustion
-	// Reduced limits for 1Gi memory containers under high-concurrency load
-	db.SetMaxOpenConns(10)                 // Limit total open connections (reduced from 25)
-	db.SetMaxIdleConns(2)                  // Minimal idle connections (reduced from 10)
+	// Tuned for high-concurrency workloads with occasional slow queries (e.g., benchmarks)
+	db.SetMaxOpenConns(25)                 // Limit total open connections (supports ~20 concurrent requests)
+	db.SetMaxIdleConns(5)                  // Idle connections for quick reuse (reduced from 10 to save memory)
 	db.SetConnMaxLifetime(5 * time.Minute) // Recycle connections periodically
 	db.SetConnMaxIdleTime(2 * time.Minute) // Close idle connections after 2min
 
