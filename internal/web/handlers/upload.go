@@ -359,18 +359,26 @@ func (h *Handler) extractImageDimensions(ctx context.Context, fileData []byte, f
 	return &imageInfo.Width, &imageInfo.Height
 }
 
-// parseTags parses comma-separated tags and returns cleaned tag names
+// parseTags parses comma-separated tags and returns cleaned, deduplicated tag names
 func parseTags(tagsStr string) []string {
 	if tagsStr == "" {
 		return nil
 	}
 
+	// Use map to deduplicate tags (case-insensitive)
+	seen := make(map[string]bool)
 	var tags []string
 	parts := strings.Split(tagsStr, ",")
 	for _, part := range parts {
 		tag := strings.TrimSpace(part)
-		if tag != "" {
+		if tag == "" {
+			continue
+		}
+		// Normalize to lowercase for duplicate detection
+		normalized := strings.ToLower(tag)
+		if !seen[normalized] {
 			tags = append(tags, tag)
+			seen[normalized] = true
 		}
 	}
 	return tags
