@@ -693,12 +693,15 @@ func (h *Handler) handleErrorScenario(ctx context.Context, span trace.Span, w ht
 
 func (h *Handler) handleSlowScenario(ctx context.Context, span trace.Span, w http.ResponseWriter, response map[string]any) {
 	// Execute a slow query using pg_sleep
+	// IMPORTANT: pg_sleep() is a void function but still needs to be scanned
+	// to properly consume the result and close the connection
 	query := "SELECT pg_sleep(2), NOW() as current_time"
 
 	h.addSpanEvent(span, "executing_slow_query")
 
+	var sleepResult any // pg_sleep returns void but must be scanned
 	var currentTime string
-	if err := h.db.QueryRowContext(ctx, query).Scan(nil, &currentTime); err != nil {
+	if err := h.db.QueryRowContext(ctx, query).Scan(&sleepResult, &currentTime); err != nil {
 		h.handleError(ctx, span, err, "Slow query failed", "slow_query_error", "")
 		http.Error(w, "Slow query failed", http.StatusInternalServerError)
 		return
