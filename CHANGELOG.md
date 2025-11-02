@@ -5,6 +5,24 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0](https://github.com/Smana/image-gallery/compare/v1.6.1...v1.7.0) (2025-11-02)
+
+
+### Features
+
+* **config:** add S3 sync on startup configuration option ([d59745c](https://github.com/Smana/image-gallery/commit/d59745c9e2bf93f5b3ebefcdc613962814846ce5))
+* **server:** add automatic memory limit configuration ([65d844c](https://github.com/Smana/image-gallery/commit/65d844cee03523486cc8b9982b3d267b4e521278))
+* **server:** implement S3 bucket sync and automemlimit initialization ([ef005e2](https://github.com/Smana/image-gallery/commit/ef005e2f98577f5354aaef704a0ae2475345a21d))
+* **settings:** set default background image with 40% opacity ([9dd4e13](https://github.com/Smana/image-gallery/commit/9dd4e131b76b116ef60ac4a137102774eff6dfca))
+
+
+### Bug Fixes
+
+* **upload:** critical memory leak fixes to prevent OOMKills ([316a264](https://github.com/Smana/image-gallery/commit/316a2644f47e04225acb263042c0b8cb178c77a9))
+* **upload:** deduplicate tags to prevent validation error ([08d2c56](https://github.com/Smana/image-gallery/commit/08d2c562ebf245924bbe54453abccc2969eed678))
+* **upload:** deduplicate tags to prevent validation error ([c628ea8](https://github.com/Smana/image-gallery/commit/c628ea8896c0b047863c9f9cc8fcdb965f7df295))
+* **upload:** improve error handling and reduce cyclomatic complexity ([40f3d9b](https://github.com/Smana/image-gallery/commit/40f3d9b1514057479f27c020fa48e24874f9991c))
+
 ## [1.6.1](https://github.com/Smana/image-gallery/compare/v1.6.0...v1.6.1) (2025-11-01)
 
 
