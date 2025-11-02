@@ -32,6 +32,7 @@ type StorageConfig struct {
 	Region          string
 	MaxUploadSize   int64
 	AllowedTypes    []string
+	SyncOnStartup   bool // Sync existing S3 objects to database on startup
 }
 
 // CacheConfig holds Redis cache configuration
@@ -123,6 +124,7 @@ func Load() (*Config, error) {
 			Region:          getEnv("STORAGE_REGION", "us-east-1"),
 			MaxUploadSize:   maxUploadSize,
 			AllowedTypes:    allowedTypes,
+			SyncOnStartup:   parseBoolOrDefault(getEnv("STORAGE_SYNC_ON_STARTUP", "false"), false),
 		},
 		Cache: CacheConfig{
 			Enabled:         cacheEnabled,
