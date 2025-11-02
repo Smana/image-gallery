@@ -131,7 +131,9 @@ func DefaultPagination() PaginationParams {
 
 // Validate ensures pagination parameters are sensible
 func (p *PaginationParams) Validate() {
-	if p.Limit <= 0 || p.Limit > 1000 {
+	// Hard limit of 50 images per page to prevent memory exhaustion
+	// Under high concurrency (15+ requests), larger limits cause OOMKills
+	if p.Limit <= 0 || p.Limit > 50 {
 		p.Limit = 50
 	}
 	if p.Offset < 0 {
