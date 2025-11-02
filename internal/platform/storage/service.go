@@ -68,7 +68,7 @@ func NewService(cfg *config.StorageConfig) (*Service, error) {
 }
 
 // Store implements StorageService.Store
-func (s *Service) Store(ctx context.Context, filename string, contentType string, data io.Reader) (string, error) {
+func (s *Service) Store(ctx context.Context, filename string, contentType string, data io.Reader, size int64) (string, error) {
 	if filename == "" {
 		return "", errors.New("filename cannot be empty")
 	}
@@ -79,6 +79,10 @@ func (s *Service) Store(ctx context.Context, filename string, contentType string
 
 	if data == nil {
 		return "", errors.New("data cannot be nil")
+	}
+
+	if size < 0 {
+		return "", errors.New("size must be non-negative")
 	}
 
 	// Security validations
@@ -105,7 +109,9 @@ func (s *Service) Store(ctx context.Context, filename string, contentType string
 	hashReader := &hashingReader{reader: sizeReader, hasher: sha256.New()}
 
 	// Upload to MinIO
-	info, err := s.client.PutObject(ctx, s.bucketName, storagePath, hashReader, -1, minio.PutObjectOptions{
+	// CRITICAL: Pass actual file size to prevent SDK from buffering entire file in memory
+	// When size is known, MinIO SDK streams efficiently without large buffer allocations
+	info, err := s.client.PutObject(ctx, s.bucketName, storagePath, hashReader, size, minio.PutObjectOptions{
 		ContentType: contentType,
 		UserMetadata: map[string]string{
 			"original-filename": filename,
@@ -443,7 +449,7 @@ func (r *hashingReader) Read(p []byte) (n int, err error) {
 
 // Legacy methods for backward compatibility
 func (s *Service) UploadFile(ctx context.Context, objectName string, reader io.Reader, objectSize int64, contentType string) error {
-	_, err := s.Store(ctx, objectName, contentType, reader)
+	_, err := s.Store(ctx, objectName, contentType, reader, objectSize)
 	return err
 }
 

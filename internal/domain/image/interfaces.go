@@ -65,7 +65,8 @@ type TagRepository interface {
 // StorageService defines the interface for file storage operations
 type StorageService interface {
 	// Store saves a file and returns the storage path
-	Store(ctx context.Context, filename string, contentType string, data io.Reader) (string, error)
+	// size is the known file size in bytes - passing this prevents MinIO SDK from buffering entire file
+	Store(ctx context.Context, filename string, contentType string, data io.Reader, size int64) (string, error)
 
 	// Retrieve gets a file from storage
 	Retrieve(ctx context.Context, path string) (io.ReadCloser, error)
