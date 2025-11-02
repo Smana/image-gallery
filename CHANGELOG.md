@@ -5,6 +5,15 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4](https://github.com/Smana/image-gallery/compare/v1.7.3...v1.7.4) (2025-11-02)
+
+
+### Bug Fixes
+
+* **database:** increase connection pool to handle benchmark load ([7de73d4](https://github.com/Smana/image-gallery/commit/7de73d418ea32f8f50444b4b51d6ad2412739e4f))
+* **health:** remove S3 from readiness check to prevent timeout failures ([e6341e7](https://github.com/Smana/image-gallery/commit/e6341e7e56d93121a228478cb4b0a0a34479bc5c))
+* **health:** remove S3 from readiness check to prevent timeout failures ([23d3a58](https://github.com/Smana/image-gallery/commit/23d3a582ae71a499f9e36977da426320e0841633))
+
 ## [1.7.3](https://github.com/Smana/image-gallery/compare/v1.7.2...v1.7.3) (2025-11-02)
 
 
