@@ -34,7 +34,7 @@ func (h *Handler) healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 // readyzHandler handles readiness probes (/readyz)
 // Returns 200 if the application is ready to serve traffic
-// Checks database and storage connectivity
+// Checks database and cache connectivity (S3 storage is not checked as it's non-critical for readiness)
 func (h *Handler) readyzHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -49,17 +49,6 @@ func (h *Handler) readyzHandler(w http.ResponseWriter, r *http.Request) {
 			allHealthy = false
 		} else {
 			checks["database"] = healthStatusHealthy
-		}
-	}
-
-	// Check storage connectivity by attempting to list bucket
-	if h.storage != nil {
-		_, err := h.storage.ListObjects(ctx, "", 1)
-		if err != nil {
-			checks["storage"] = "unhealthy: " + err.Error()
-			allHealthy = false
-		} else {
-			checks["storage"] = healthStatusHealthy
 		}
 	}
 
