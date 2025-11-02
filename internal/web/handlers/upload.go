@@ -175,6 +175,37 @@ func (h *Handler) uploadImagesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// detectContentType detects the content type of a file by reading its header
+func (h *Handler) detectContentType(ctx context.Context, file multipart.File, fileHeader *multipart.FileHeader, fileSpan trace.Span) (string, error) {
+	contentType := fileHeader.Header.Get("Content-Type")
+	if contentType != "" {
+		return contentType, nil
+	}
+
+	// Read only first 512 bytes for content type detection (HTTP sniffing standard)
+	buffer := make([]byte, 512)
+	n, err := io.ReadFull(file, buffer)
+	if err != nil && err != io.ErrUnexpectedEOF {
+		fileSpan.RecordError(err)
+		fileSpan.SetStatus(codes.Error, "failed to read file for content type detection")
+		h.logger.Error(ctx).Err(err).Str("filename", fileHeader.Filename).Msg("Failed to read file for content type detection")
+		return "", fmt.Errorf("failed to read file: %w", err)
+	}
+	contentType = http.DetectContentType(buffer[:n])
+
+	// Seek back to start for upload (multipart.File supports seeking)
+	if seeker, ok := file.(io.Seeker); ok {
+		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			fileSpan.RecordError(err)
+			fileSpan.SetStatus(codes.Error, "failed to seek file")
+			h.logger.Error(ctx).Err(err).Str("filename", fileHeader.Filename).Msg("Failed to seek file")
+			return "", fmt.Errorf("failed to seek file: %w", err)
+		}
+	}
+
+	return contentType, nil
+}
+
 // processUploadedFile processes a single uploaded file and returns the result
 func (h *Handler) processUploadedFile(ctx context.Context, fileHeader *multipart.FileHeader, tags []string) processedFileResult {
 	// Create child span for each file
@@ -219,33 +250,20 @@ func (h *Handler) processUploadedFile(ctx context.Context, fileHeader *multipart
 		}
 	}
 
-	// Detect and validate content type from header or file sniffing
-	contentType := fileHeader.Header.Get("Content-Type")
-	if contentType == "" {
-		// Read only first 512 bytes for content type detection (HTTP sniffing standard)
-		buffer := make([]byte, 512)
-		n, _ := io.ReadFull(file, buffer)
-		contentType = http.DetectContentType(buffer[:n])
-
-		// Seek back to start for upload (multipart.File supports seeking)
-		if seeker, ok := file.(io.Seeker); ok {
-			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
-				_ = file.Close() //nolint:errcheck
-				fileSpan.RecordError(err)
-				fileSpan.SetStatus(codes.Error, "failed to seek file")
-				h.logger.Error(ctx).Err(err).Str("filename", fileHeader.Filename).Msg("Failed to seek file")
-				return processedFileResult{
-					uploadError: &UploadError{
-						Filename: fileHeader.Filename,
-						Error:    fmt.Sprintf("Failed to seek file: %v", err),
-					},
-				}
-			}
+	// Detect and validate content type
+	contentType, err := h.detectContentType(ctx, file, fileHeader, fileSpan)
+	if err != nil {
+		_ = file.Close() //nolint:errcheck // Already returning error, ignore close error
+		return processedFileResult{
+			uploadError: &UploadError{
+				Filename: fileHeader.Filename,
+				Error:    fmt.Sprintf("Failed to detect content type: %v", err),
+			},
 		}
 	}
 
 	if !isSupportedImageType(contentType) {
-		_ = file.Close() //nolint:errcheck
+		_ = file.Close() //nolint:errcheck // Already returning error, ignore close error
 		err := fmt.Errorf("unsupported image type: %s", contentType)
 		fileSpan.RecordError(err)
 		fileSpan.SetStatus(codes.Error, "unsupported content type")
