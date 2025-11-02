@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,8 +19,21 @@ import (
 	"image-gallery/internal/services"
 	"image-gallery/internal/web/handlers"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/joho/godotenv"
 )
+
+func init() {
+	// Automatically set GOMEMLIMIT to 90% of cgroup's memory limit
+	// This helps prevent OOM kills in containerized environments
+	if _, err := memlimit.SetGoMemLimitWithOpts(
+		memlimit.WithRatio(0.9),
+		memlimit.WithProvider(memlimit.FromCgroup),
+		memlimit.WithLogger(slog.Default()),
+	); err != nil {
+		slog.Warn("Failed to set automatic memory limit", "error", err)
+	}
+}
 
 func main() {
 	if err := godotenv.Load(); err != nil {
@@ -107,6 +121,16 @@ func main() {
 	}()
 	logger.GetZerolog().Info().Msg("Services container initialized")
 
+	// Sync existing S3 images to database if configured
+	if cfg.Storage.SyncOnStartup {
+		logger.GetZerolog().Info().Msg("Starting S3 bucket synchronization...")
+		if err := syncExistingImages(context.Background(), container, logger); err != nil {
+			logger.GetZerolog().Error().Err(err).Msg("Failed to sync existing images, continuing startup...")
+		} else {
+			logger.GetZerolog().Info().Msg("S3 bucket synchronization completed")
+		}
+	}
+
 	handler := handlers.NewWithContainer(container)
 
 	srv := server.New(cfg.Port, handler.Routes())
@@ -137,4 +161,69 @@ func main() {
 
 	logger.GetZerolog().Info().Msg("Server exited gracefully")
 	fmt.Println("Server exited")
+}
+
+// syncExistingImages synchronizes existing S3 objects to the database
+func syncExistingImages(ctx context.Context, container *services.Container, logger *observability.Logger) error {
+	// Get database connection
+	dbRepo := container.DB()
+
+	// Create a storage service wrapper to list objects
+	storageSvc, err := storage.NewService(&container.Config().Storage)
+	if err != nil {
+		return fmt.Errorf("failed to create storage service: %w", err)
+	}
+
+	// List all objects in the bucket
+	objects, err := storageSvc.ListObjects(ctx, "", 10000) // List up to 10k objects
+	if err != nil {
+		return fmt.Errorf("failed to list objects: %w", err)
+	}
+
+	logger.GetZerolog().Info().Int("count", len(objects)).Msg("Found objects in S3 bucket")
+
+	synced := 0
+	skipped := 0
+
+	for _, obj := range objects {
+		// Check if image already exists in database by storage path
+		var existingImage struct{ ID int }
+		err := dbRepo.QueryRowContext(ctx, "SELECT id FROM images WHERE storage_path = $1 LIMIT 1", obj.Key).Scan(&existingImage.ID)
+		if err == nil {
+			// Image already exists
+			skipped++
+			continue
+		}
+
+		// Extract original filename from metadata or use key
+		originalFilename := obj.Key
+		if metaFilename, ok := obj.UserMetadata["original-filename"]; ok {
+			originalFilename = metaFilename
+		}
+
+		// Create image record in database
+		// Note: We don't have the actual file data, so dimensions will be NULL
+		// This is acceptable for existing images as they can be updated later
+		_, err = dbRepo.ExecContext(ctx, `
+			INSERT INTO images (original_filename, storage_path, content_type, file_size, uploaded_at, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, NOW(), NOW(), NOW())
+			ON CONFLICT (storage_path) DO NOTHING
+		`, originalFilename, obj.Key, obj.ContentType, obj.Size)
+
+		if err != nil {
+			logger.GetZerolog().Error().Err(err).Str("path", obj.Key).Msg("Failed to create image record")
+			continue
+		}
+
+		synced++
+		logger.GetZerolog().Debug().Str("path", obj.Key).Str("filename", originalFilename).Msg("Synced image to database")
+	}
+
+	logger.GetZerolog().Info().
+		Int("synced", synced).
+		Int("skipped", skipped).
+		Int("total", len(objects)).
+		Msg("S3 synchronization summary")
+
+	return nil
 }
