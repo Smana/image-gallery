@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	maxUploadSize        = 10 << 20 // 10MB total per request (reduced from 50MB to prevent memory exhaustion)
-	maxFileSize          = 10 << 20 // 10MB per file
-	maxMemoryPerUpload   = 1 << 20  // 1MB in-memory buffer per upload (rest spills to disk to prevent OOMKills)
+	maxUploadSize      = 10 << 20 // 10MB total per request (reduced from 50MB to prevent memory exhaustion)
+	maxFileSize        = 10 << 20 // 10MB per file
+	maxMemoryPerUpload = 1 << 20  // 1MB in-memory buffer per upload (rest spills to disk to prevent OOMKills)
 )
 
 // UploadResponse represents the response for a successful upload
