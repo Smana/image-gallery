@@ -5,6 +5,15 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.6](https://github.com/Smana/image-gallery/compare/v1.7.5...v1.7.6) (2025-11-02)
+
+
+### Bug Fixes
+
+* **otel:** fix code formatting in observability provider ([5dcbf41](https://github.com/Smana/image-gallery/commit/5dcbf419b87657ed32e18e53fa8e74cb1121d515))
+* **otel:** limit span queue size to prevent OOMKills under sustained … ([ee24944](https://github.com/Smana/image-gallery/commit/ee24944f5df1048ce924749f431dd38570a74c1d))
+* **otel:** limit span queue size to prevent OOMKills under sustained load ([40710fd](https://github.com/Smana/image-gallery/commit/40710fd73b0550698bc904422b653892bf1ac846))
+
 ## [1.7.5](https://github.com/Smana/image-gallery/compare/v1.7.4...v1.7.5) (2025-11-02)
 
 
