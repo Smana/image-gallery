@@ -391,21 +391,12 @@ func (tc *TestContainers) ResetDatabase(ctx context.Context) error {
 		"schema_migrations",
 	}
 
-	tx, err := tc.DB.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }() //nolint:errcheck // Transaction cleanup
-
+	// Execute TRUNCATE commands outside of a transaction to avoid failed transaction state
+	// when tables don't exist. Each TRUNCATE is independent.
 	for _, table := range tables {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s", table)); err != nil {
-			// Ignore errors for tables that might not exist
-			continue
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit reset transaction: %w", err)
+		// Use TRUNCATE CASCADE which is faster and handles foreign keys automatically
+		// Ignore errors for tables that might not exist yet
+		_, _ = tc.DB.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table)) //nolint:errcheck // Ignore non-existent tables
 	}
 
 	// Re-apply migrations to ensure schema is fresh
