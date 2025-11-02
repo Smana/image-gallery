@@ -234,7 +234,8 @@ func (s *ImageServiceImpl) validateCreateRequest(ctx context.Context, req *image
 
 func (s *ImageServiceImpl) storeImageFile(ctx context.Context, req *image.CreateImageRequest, data io.Reader) (string, error) {
 	filename := s.generateUniqueFilename(req.OriginalFilename)
-	storageResp, err := s.storage.Store(ctx, filename, req.ContentType, data)
+	// Pass actual file size to storage layer to prevent MinIO SDK memory buffering
+	storageResp, err := s.storage.Store(ctx, filename, req.ContentType, data, req.FileSize)
 	if err != nil {
 		return "", fmt.Errorf("failed to store image: %w", err)
 	}

@@ -84,6 +84,7 @@ func TestService_Store(t *testing.T) {
 		filename    string
 		contentType string
 		data        io.Reader
+		size        int64
 		expectError bool
 	}{
 		{
@@ -91,6 +92,7 @@ func TestService_Store(t *testing.T) {
 			filename:    "",
 			contentType: "image/jpeg",
 			data:        strings.NewReader("test data"),
+			size:        9,
 			expectError: true,
 		},
 		{
@@ -98,6 +100,7 @@ func TestService_Store(t *testing.T) {
 			filename:    "test.jpg",
 			contentType: "",
 			data:        strings.NewReader("test data"),
+			size:        9,
 			expectError: true,
 		},
 		{
@@ -105,6 +108,7 @@ func TestService_Store(t *testing.T) {
 			filename:    "test.jpg",
 			contentType: "image/jpeg",
 			data:        nil,
+			size:        0,
 			expectError: true,
 		},
 		{
@@ -112,13 +116,14 @@ func TestService_Store(t *testing.T) {
 			filename:    "test.txt",
 			contentType: "text/plain",
 			data:        strings.NewReader("test data"),
+			size:        9,
 			expectError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := service.Store(context.Background(), tt.filename, tt.contentType, tt.data)
+			_, err := service.Store(context.Background(), tt.filename, tt.contentType, tt.data, tt.size)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -467,7 +472,7 @@ func TestService_SecurityValidations(t *testing.T) {
 		}
 
 		for _, filename := range tests {
-			_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"))
+			_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"), 14)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "security validation failed")
 		}
@@ -481,7 +486,7 @@ func TestService_SecurityValidations(t *testing.T) {
 		}
 
 		for _, filename := range tests {
-			_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"))
+			_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"), 14)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "security validation failed")
 		}
@@ -496,7 +501,7 @@ func TestService_SecurityValidations(t *testing.T) {
 		}
 
 		for _, filename := range tests {
-			_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"))
+			_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"), 14)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "security validation failed")
 		}
@@ -513,7 +518,7 @@ func TestService_SecurityValidations(t *testing.T) {
 		}
 
 		for _, filename := range tests {
-			_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"))
+			_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"), 14)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "security validation failed")
 		}
@@ -531,7 +536,8 @@ func TestService_SecurityValidations(t *testing.T) {
 		}
 
 		for _, test := range tests {
-			_, err := service.Store(context.Background(), test.filename, test.contentType, strings.NewReader("fake data"))
+			data := "fake data"
+			_, err := service.Store(context.Background(), test.filename, test.contentType, strings.NewReader(data), int64(len(data)))
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "security validation failed")
 		}
@@ -539,14 +545,16 @@ func TestService_SecurityValidations(t *testing.T) {
 
 	t.Run("filename too long", func(t *testing.T) {
 		longFilename := strings.Repeat("a", 300) + ".jpg"
-		_, err := service.Store(context.Background(), longFilename, "image/jpeg", strings.NewReader("fake jpeg data"))
+		data := "fake jpeg data"
+		_, err := service.Store(context.Background(), longFilename, "image/jpeg", strings.NewReader(data), int64(len(data)))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "security validation failed")
 	})
 
 	t.Run("null bytes in filename", func(t *testing.T) {
 		filename := "image\x00.jpg"
-		_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader("fake jpeg data"))
+		data := "fake jpeg data"
+		_, err := service.Store(context.Background(), filename, "image/jpeg", strings.NewReader(data), int64(len(data)))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "security validation failed")
 	})
@@ -563,7 +571,7 @@ func TestService_MagicNumberValidation(t *testing.T) {
 		fakeData := []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09}
 		fakeData = append(fakeData, make([]byte, 100)...)
 
-		_, err := service.Store(context.Background(), "test.jpg", "image/jpeg", bytes.NewReader(fakeData))
+		_, err := service.Store(context.Background(), "test.jpg", "image/jpeg", bytes.NewReader(fakeData), int64(len(fakeData)))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "file content does not match declared content type")
 	})
@@ -571,7 +579,7 @@ func TestService_MagicNumberValidation(t *testing.T) {
 	t.Run("file too small", func(t *testing.T) {
 		smallData := []byte{0x01, 0x02}
 
-		_, err := service.Store(context.Background(), "test.jpg", "image/jpeg", bytes.NewReader(smallData))
+		_, err := service.Store(context.Background(), "test.jpg", "image/jpeg", bytes.NewReader(smallData), int64(len(smallData)))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "file too small to validate")
 	})
@@ -669,9 +677,10 @@ func TestServiceIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("store and retrieve", func(t *testing.T) {
-		data := strings.NewReader("test file content")
+		content := "test file content"
+		data := strings.NewReader(content)
 
-		path, err := service.Store(ctx, "test.txt", "text/plain", data)
+		path, err := service.Store(ctx, "test.txt", "text/plain", data, int64(len(content)))
 		if err != nil {
 			t.Skipf("Store failed (expected with text/plain): %v", err)
 		}

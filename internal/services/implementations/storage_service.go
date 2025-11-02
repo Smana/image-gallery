@@ -80,12 +80,13 @@ func initStorageService(s *StorageServiceImpl) *StorageServiceImpl {
 }
 
 // Store saves a file and returns the storage path
-func (s *StorageServiceImpl) Store(ctx context.Context, filename string, contentType string, data io.Reader) (string, error) {
+func (s *StorageServiceImpl) Store(ctx context.Context, filename string, contentType string, data io.Reader, size int64) (string, error) {
 	startTime := time.Now()
 	ctx, span := s.tracer.Start(ctx, "Store",
 		trace.WithAttributes(
 			attribute.String("storage.filename", filename),
 			attribute.String("storage.content_type", contentType),
+			attribute.Int64("storage.size", size),
 		),
 	)
 	defer span.End()
@@ -94,7 +95,7 @@ func (s *StorageServiceImpl) Store(ctx context.Context, filename string, content
 	var err error
 
 	if s.service != nil {
-		path, err = s.service.Store(ctx, filename, contentType, data)
+		path, err = s.service.Store(ctx, filename, contentType, data, size)
 	} else {
 		// Fallback to MinIOClient if service not available
 		path = "images/" + filename
