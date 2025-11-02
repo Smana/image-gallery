@@ -5,6 +5,15 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2](https://github.com/Smana/image-gallery/compare/v1.7.1...v1.7.2) (2025-11-02)
+
+
+### Bug Fixes
+
+* **database:** add connection pool limits to prevent resource exhaustion ([37b13df](https://github.com/Smana/image-gallery/commit/37b13dfbf1156849ba31969b22bf91b369769c78))
+* **database:** add connection pool limits to prevent resource exhaustion ([5e09eb7](https://github.com/Smana/image-gallery/commit/5e09eb7990bf6735d05293a5e4940af64020d449))
+* **database:** fix code formatting in connection pool configuration ([d4e03e3](https://github.com/Smana/image-gallery/commit/d4e03e39be9b46d0500356ec2b0b8c05aff9d780))
+
 ## [1.7.1](https://github.com/Smana/image-gallery/compare/v1.7.0...v1.7.1) (2025-11-02)
 
 
