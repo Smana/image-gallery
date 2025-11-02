@@ -5,6 +5,15 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5](https://github.com/Smana/image-gallery/compare/v1.7.4...v1.7.5) (2025-11-02)
+
+
+### Bug Fixes
+
+* **handlers:** fix code formatting in upload handler ([c28c1af](https://github.com/Smana/image-gallery/commit/c28c1aff066b1145e4e232d957a7ded5e47f99cc))
+* **upload:** reduce ParseMultipartForm memory buffer to prevent OOMKills ([18477a1](https://github.com/Smana/image-gallery/commit/18477a19ba95b5cdd54dbb23b3f730093205fb37))
+* **upload:** reduce ParseMultipartForm memory buffer to prevent OOMKills ([6391248](https://github.com/Smana/image-gallery/commit/6391248f1cec9907b95bbf2c00e5da36001752ba))
+
 ## [1.7.4](https://github.com/Smana/image-gallery/compare/v1.7.3...v1.7.4) (2025-11-02)
 
 
