@@ -115,10 +115,10 @@ func initTracerProvider(ctx context.Context, res *resource.Resource, config Conf
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
 		sdktrace.WithBatcher(traceExporter,
-			sdktrace.WithBatchTimeout(2*time.Second),       // Export more frequently (5s→2s)
-			sdktrace.WithMaxExportBatchSize(256),           // Smaller batches (512→256)
-			sdktrace.WithMaxQueueSize(256),                 // Limit queue to prevent OOMKills
-			sdktrace.WithExportTimeout(10*time.Second),     // Timeout slow exports
+			sdktrace.WithBatchTimeout(2*time.Second),   // Export more frequently (5s→2s)
+			sdktrace.WithMaxExportBatchSize(256),       // Smaller batches (512→256)
+			sdktrace.WithMaxQueueSize(256),             // Limit queue to prevent OOMKills
+			sdktrace.WithExportTimeout(10*time.Second), // Timeout slow exports
 		),
 		sdktrace.WithSampler(sampler),
 	)
