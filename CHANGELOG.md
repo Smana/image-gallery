@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1](https://github.com/Smana/image-gallery/compare/v1.7.0...v1.7.1) (2025-11-02)
+
+
+### Bug Fixes
+
+* **handlers:** fix database connection leak in slow query scenario ([5dd6b3e](https://github.com/Smana/image-gallery/commit/5dd6b3ec21af54df69f919d84ab25733ae80a779))
+* **handlers:** fix database connection leak in slow query scenario ([f3ae6aa](https://github.com/Smana/image-gallery/commit/f3ae6aa7df4cddae12361763d94a5025ea606c6a))
+
 ## [1.7.0](https://github.com/Smana/image-gallery/compare/v1.6.1...v1.7.0) (2025-11-02)
 
 
