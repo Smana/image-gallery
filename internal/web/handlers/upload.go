@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	maxUploadSize = 10 << 20 // 10MB total per request (reduced from 50MB to prevent memory exhaustion)
-	maxFileSize   = 10 << 20 // 10MB per file
+	maxUploadSize      = 10 << 20 // 10MB total per request (reduced from 50MB to prevent memory exhaustion)
+	maxFileSize        = 10 << 20 // 10MB per file
+	maxMemoryPerUpload = 1 << 20  // 1MB in-memory buffer per upload (rest spills to disk to prevent OOMKills)
 )
 
 // UploadResponse represents the response for a successful upload
@@ -72,8 +73,11 @@ func (h *Handler) uploadImagesHandler(w http.ResponseWriter, r *http.Request) {
 	// Limit request body size
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
 
-	// Parse multipart form
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+	// Parse multipart form with limited in-memory buffer
+	// maxMemoryPerUpload (1MB) is buffered in RAM per request
+	// Files larger than 1MB are written to temporary files in /tmp
+	// This prevents OOMKills under high concurrency (10 concurrent uploads = 10MB not 100MB)
+	if err := r.ParseMultipartForm(maxMemoryPerUpload); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to parse multipart form")
 		h.logger.Error(ctx).Err(err).Msg("Failed to parse multipart form")
