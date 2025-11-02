@@ -5,6 +5,15 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3](https://github.com/Smana/image-gallery/compare/v1.7.2...v1.7.3) (2025-11-02)
+
+
+### Bug Fixes
+
+* **database:** eliminate json_agg memory explosion causing immediate … ([78efae2](https://github.com/Smana/image-gallery/commit/78efae2bb2a7d15c1fd967a016514138e28abff3))
+* **database:** eliminate json_agg memory explosion causing immediate OOMKills ([c82ff39](https://github.com/Smana/image-gallery/commit/c82ff39847036b625ae51a7f431f197374852c8a))
+* **database:** remove deprecated json_agg code and fix test helper ([c75f4ac](https://github.com/Smana/image-gallery/commit/c75f4ac793b0ee8f98a2aa0eaf5a56eab9ff69a6))
+
 ## [1.7.2](https://github.com/Smana/image-gallery/compare/v1.7.1...v1.7.2) (2025-11-02)
 
 
