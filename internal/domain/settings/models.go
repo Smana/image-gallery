@@ -108,17 +108,19 @@ func (r *UpdateSettingsRequest) Validate() error {
 // DefaultSettings returns the default user settings
 func DefaultSettings() *UserSettings {
 	defaultUserID := "default"
+	defaultBgURL := "https://wallpapershome.com/images/pages/pic_h/25835.jpg"
 	return &UserSettings{
-		UserID:            &defaultUserID,
-		BackgroundStyle:   string(BackgroundStyleCover),
-		BackgroundOpacity: 0.3,
-		FontFamily:        string(FontFamilySystemUI),
-		TextTheme:         string(TextThemeLight),
-		ShowTags:          true,
-		ShowDimensions:    true,
-		ShowContentType:   true,
-		GridColumns:       5,
-		CreatedAt:         time.Now(),
-		UpdatedAt:         time.Now(),
+		UserID:             &defaultUserID,
+		BackgroundImageURL: &defaultBgURL,
+		BackgroundStyle:    string(BackgroundStyleCover),
+		BackgroundOpacity:  0.4, // 40% opacity
+		FontFamily:         string(FontFamilySystemUI),
+		TextTheme:          string(TextThemeLight),
+		ShowTags:           true,
+		ShowDimensions:     true,
+		ShowContentType:    true,
+		GridColumns:        5,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 }
