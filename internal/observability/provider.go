@@ -111,11 +111,14 @@ func initTracerProvider(ctx context.Context, res *resource.Resource, config Conf
 	}
 
 	// Create tracer provider with batch span processor
+	// Limit queue size to prevent memory accumulation under sustained load
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
 		sdktrace.WithBatcher(traceExporter,
-			sdktrace.WithBatchTimeout(5*time.Second),
-			sdktrace.WithMaxExportBatchSize(512),
+			sdktrace.WithBatchTimeout(2*time.Second),   // Export more frequently (5s→2s)
+			sdktrace.WithMaxExportBatchSize(256),       // Smaller batches (512→256)
+			sdktrace.WithMaxQueueSize(256),             // Limit queue to prevent OOMKills
+			sdktrace.WithExportTimeout(10*time.Second), // Timeout slow exports
 		),
 		sdktrace.WithSampler(sampler),
 	)
