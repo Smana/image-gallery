@@ -137,6 +137,11 @@ func (m *MockDatabaseImageRepository) GetWithTags(ctx context.Context, paginatio
 	return args.Get(0).([]*database.Image), args.Error(1)
 }
 
+func (m *MockDatabaseImageRepository) CountByTags(ctx context.Context, tags []string, matchAll bool) (int, error) {
+	args := m.Called(ctx, tags, matchAll)
+	return args.Int(0), args.Error(1)
+}
+
 func (m *MockDatabaseImageRepository) GetByTags(ctx context.Context, tags []string, matchAll bool, pagination database.PaginationParams) ([]*database.Image, error) {
 	args := m.Called(ctx, tags, matchAll, pagination)
 	return args.Get(0).([]*database.Image), args.Error(1)
@@ -363,8 +368,8 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 		}
 		expectedTags := []string{"nature"}
 
-		// Mock GetByTags call (only one call now - count is derived from results)
 		mockDB.On("GetByTags", ctx, expectedTags, false, expectedPagination).Return(dbImages, nil)
+		mockDB.On("CountByTags", ctx, expectedTags, false).Return(37, nil)
 
 		// When: Listing images with tag filter
 		response, err := adapter.List(ctx, req)
@@ -375,6 +380,8 @@ func TestImageRepositoryAdapter_List(t *testing.T) {
 		assert.Len(t, response.Images, 1)
 		assert.Equal(t, 1, response.Images[0].ID)
 		assert.Equal(t, "nature1.jpg", response.Images[0].Filename)
+		assert.Equal(t, 37, response.TotalCount, "the total comes from the count query, not the page length")
+		assert.Equal(t, 4, response.TotalPages)
 
 		mockDB.AssertExpectations(t)
 	})

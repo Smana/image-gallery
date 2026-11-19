@@ -39,6 +39,7 @@ type ImageRepository interface {
 	// Tag relationships
 	GetWithTags(ctx context.Context, pagination PaginationParams, sort SortParams) ([]*Image, error)
 	GetByTags(ctx context.Context, tags []string, matchAll bool, pagination PaginationParams) ([]*Image, error)
+	CountByTags(ctx context.Context, tags []string, matchAll bool) (int, error)
 }
 
 // TagRepository defines the interface for tag data access

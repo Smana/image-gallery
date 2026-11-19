@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -577,12 +578,22 @@ func (r *imageRepository) GetWithTags(ctx context.Context, pagination Pagination
 		return nil, err
 	}
 
-	// If no images, return early
+	if err := r.attachTags(ctx, images); err != nil {
+		return nil, err
+	}
+	return images, nil
+}
+
+// attachTags loads the tags of every image in one batch query.
+func (r *imageRepository) attachTags(ctx context.Context, images []*Image) error {
 	if len(images) == 0 {
-		return images, nil
+		return nil
+	}
+	imageIDs := make([]int, len(images))
+	for i, img := range images {
+		imageIDs[i] = img.ID
 	}
 
-	// Query 2: Get tags for these specific images (batch query)
 	// Using ANY($1) allows PostgreSQL to use index on image_id efficiently
 	tagQuery := `
 		SELECT it.image_id, t.id, t.name, t.description, t.color, t.created_at
@@ -594,47 +605,60 @@ func (r *imageRepository) GetWithTags(ctx context.Context, pagination Pagination
 
 	tagRows, err := r.db.QueryContext(ctx, tagQuery, pq.Array(imageIDs))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = tagRows.Close() }() //nolint:errcheck // Resource cleanup
 
-	// Build a map of image_id -> tags for efficient lookup
 	imageTagsMap := make(map[int][]Tag, len(images))
-
 	for tagRows.Next() {
 		var imageID int
 		var tag Tag
-
-		err := tagRows.Scan(
-			&imageID,
-			&tag.ID,
-			&tag.Name,
-			&tag.Description,
-			&tag.Color,
-			&tag.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
+		if err := tagRows.Scan(&imageID, &tag.ID, &tag.Name, &tag.Description, &tag.Color, &tag.CreatedAt); err != nil {
+			return err
 		}
-
 		imageTagsMap[imageID] = append(imageTagsMap[imageID], tag)
 	}
-
 	if err := tagRows.Err(); err != nil {
-		return nil, err
+		return err
 	}
 
-	// Assign tags to images (no JSON unmarshaling needed!)
-	for _, image := range images {
-		if tags, ok := imageTagsMap[image.ID]; ok {
-			image.Tags = tags
-		}
+	for _, img := range images {
+		img.Tags = imageTagsMap[img.ID]
 	}
-
-	return images, nil
+	return nil
 }
 
-// GetByTags retrieves images that have specific tags
+// tagFilter is the WHERE condition shared by GetByTags and CountByTags. The
+// tag names are bound to $1; with matchAll their distinct count is bound to $2.
+func tagFilter(tags []string, matchAll bool) (cond string, args []any) {
+	tags = slices.Compact(slices.Sorted(slices.Values(tags)))
+	if matchAll {
+		return `(
+				SELECT COUNT(DISTINCT t.name) FROM image_tags it
+				INNER JOIN tags t ON it.tag_id = t.id
+				WHERE it.image_id = i.id AND t.name = ANY($1::text[])
+			) = $2`, []any{pq.Array(tags), len(tags)}
+	}
+	return `EXISTS (
+				SELECT 1 FROM image_tags it
+				INNER JOIN tags t ON it.tag_id = t.id
+				WHERE it.image_id = i.id AND t.name = ANY($1::text[])
+			)`, []any{pq.Array(tags)}
+}
+
+// CountByTags counts the images GetByTags would return across all pages.
+func (r *imageRepository) CountByTags(ctx context.Context, tags []string, matchAll bool) (int, error) {
+	if len(tags) == 0 {
+		return 0, nil
+	}
+	cond, args := tagFilter(tags, matchAll)
+	var n int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM images i WHERE `+cond, args...).Scan(&n)
+	return n, err
+}
+
+// GetByTags retrieves images that have any (or, with matchAll, all) of the
+// given tags, each with its full tag set.
 func (r *imageRepository) GetByTags(ctx context.Context, tags []string, matchAll bool, pagination PaginationParams) ([]*Image, error) {
 	if len(tags) == 0 {
 		return []*Image{}, nil
@@ -642,43 +666,26 @@ func (r *imageRepository) GetByTags(ctx context.Context, tags []string, matchAll
 
 	pagination.Validate()
 
-	var query string
-	args := []interface{}{pq.Array(tags), pagination.Limit, pagination.Offset}
+	cond, args := tagFilter(tags, matchAll)
+	query := fmt.Sprintf(`
+		SELECT i.id, i.filename, i.original_filename, i.content_type, i.file_size,
+			   i.storage_path, i.thumbnail_path, i.status, i.processing_error, i.processed_at, i.width, i.height, i.uploaded_at,
+			   i.metadata, i.created_at, i.updated_at
+		FROM images i
+		WHERE %s
+		ORDER BY i.uploaded_at DESC, i.id DESC
+		LIMIT $%d OFFSET $%d
+	`, cond, len(args)+1, len(args)+2)
+	args = append(args, pagination.Limit, pagination.Offset)
 
-	if matchAll {
-		// Images must have ALL specified tags
-		query = `
-			SELECT DISTINCT i.id, i.filename, i.original_filename, i.content_type, i.file_size,
-				   i.storage_path, i.thumbnail_path, i.status, i.processing_error, i.processed_at, i.width, i.height, i.uploaded_at,
-				   i.metadata, i.created_at, i.updated_at
-			FROM images i
-			WHERE EXISTS (
-				SELECT 1 FROM image_tags it 
-				INNER JOIN tags t ON it.tag_id = t.id 
-				WHERE it.image_id = i.id AND t.name = ANY($1::text[])
-				GROUP BY it.image_id 
-				HAVING COUNT(DISTINCT t.name) = $4
-			)
-			ORDER BY i.uploaded_at DESC
-			LIMIT $2 OFFSET $3
-		`
-		args = append(args, len(tags))
-	} else {
-		// Images must have ANY of the specified tags
-		query = `
-			SELECT DISTINCT i.id, i.filename, i.original_filename, i.content_type, i.file_size,
-				   i.storage_path, i.thumbnail_path, i.status, i.processing_error, i.processed_at, i.width, i.height, i.uploaded_at,
-				   i.metadata, i.created_at, i.updated_at
-			FROM images i
-			INNER JOIN image_tags it ON i.id = it.image_id
-			INNER JOIN tags t ON it.tag_id = t.id
-			WHERE t.name = ANY($1::text[])
-			ORDER BY i.uploaded_at DESC
-			LIMIT $2 OFFSET $3
-		`
+	images, err := r.scanImages(ctx, query, args...)
+	if err != nil {
+		return nil, err
 	}
-
-	return r.scanImages(ctx, query, args...)
+	if err := r.attachTags(ctx, images); err != nil {
+		return nil, err
+	}
+	return images, nil
 }
 
 // scanImages is a helper method to scan multiple image records

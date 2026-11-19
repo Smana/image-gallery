@@ -150,13 +150,9 @@ func (a *ImageRepositoryAdapter) List(ctx context.Context, req *image.ListImages
 			return nil, err
 		}
 
-		// For count, we need to get all matching images (this is simplified)
-		// TODO: Add a dedicated count method for tag filtering in repository
-		count := len(dbImages)
-		if len(dbImages) == pagination.Limit {
-			// If we got exactly the limit, there might be more
-			// This is an approximation - proper implementation would use COUNT query
-			count = pagination.Limit * req.Page
+		count, err := a.dbRepo.CountByTags(ctx, tagFilters, req.MatchAll)
+		if err != nil {
+			return nil, err
 		}
 
 		images := make([]image.Image, len(dbImages))
@@ -312,20 +308,7 @@ func (a *ImageRepositoryAdapter) GetStats(ctx context.Context) (*image.ImageStat
 }
 
 func (a *ImageRepositoryAdapter) CountByTag(ctx context.Context, tagName string) (int, error) {
-	// This is a simplified implementation. In a real system, you'd want a dedicated count query
-	// For now, we'll use a reasonable limit and count the results
-	pagination := database.PaginationParams{
-		Limit:  1000, // Reasonable limit for counting
-		Offset: 0,
-	}
-
-	tags := []string{tagName}
-	dbImages, err := a.dbRepo.GetByTags(ctx, tags, false, pagination)
-	if err != nil {
-		return 0, err
-	}
-
-	return len(dbImages), nil
+	return a.dbRepo.CountByTags(ctx, []string{tagName}, false)
 }
 
 // Helper method to convert database Image to domain Image
