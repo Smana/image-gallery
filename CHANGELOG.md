@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1](https://github.com/Smana/image-gallery/compare/v2.1.0...v2.1.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **release:** build arm64 images from the arm64 binary ([423ad41](https://github.com/Smana/image-gallery/commit/423ad41a650966fc2d87b7b49c361f57e76d28db))
+* **release:** build arm64 images from the arm64 binary ([c45b685](https://github.com/Smana/image-gallery/commit/c45b68514807650f6908cd1bb0dde5a90ddac89b))
+
 ## [2.1.0](https://github.com/Smana/image-gallery/compare/v2.0.0...v2.1.0) (2026-11-19)
 
 
