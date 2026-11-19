@@ -5,6 +5,21 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0](https://github.com/Smana/image-gallery/compare/v2.0.0...v2.1.0) (2026-11-19)
+
+
+### Features
+
+* **ui:** rebuild the gallery as an embedded light-table UI ([cb5a5e3](https://github.com/Smana/image-gallery/commit/cb5a5e387f37785d9f92d35aa2210309bde148c4))
+* **ui:** rebuild the gallery as an embedded light-table UI ([2dbcf15](https://github.com/Smana/image-gallery/commit/2dbcf1520794ec085362f798690112cd31ac2863))
+
+
+### Bug Fixes
+
+* **db:** load tags and count matches for tag-filtered listings ([f806a98](https://github.com/Smana/image-gallery/commit/f806a98ed6672e3eb5c3666106bac5a1aa81de8a))
+* **settings:** accept only http(s) background URLs and known fonts ([afdddb6](https://github.com/Smana/image-gallery/commit/afdddb6ffdc7e5d5162287683c2776a527f856ab))
+* **settings:** reset the default row instead of adding a NULL-user one ([7b09076](https://github.com/Smana/image-gallery/commit/7b0907649c28d2f3b8a864d0da46ae9d19d2a57c))
+
 ## [2.0.0](https://github.com/Smana/image-gallery/compare/v1.7.7...v2.0.0) (2026-09-13)
 
 
