@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"image-gallery/internal/domain/image"
 	"image-gallery/internal/domain/settings"
@@ -32,104 +33,108 @@ const (
 	// goconst reason as contentTypeJPEG/contentTypePNG in handlers.go.
 	contentTypeJPEGAlt = "image/jpg"
 	contentTypeWebP    = "image/webp"
-
-	// JSON keys of the image listing responses
-	jsonKeyImages     = "images"
-	jsonKeyTotalCount = "total_count"
 )
 
-//nolint:gocyclo // Handler with multiple response formats and filter logic
 func (h *Handler) listImagesHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Parse tag filters from query parameters
-	tagFilters := r.URL.Query()["tags"]
-	matchAll := r.URL.Query().Get("match_all") == queryParamTrue
+	q := r.URL.Query()
+	tagFilters := q["tags"]
+	matchAll := q.Get("match_all") == queryParamTrue
+	page, errPage := positiveQueryInt(q, "page", 1)
+	pageSize, errSize := positiveQueryInt(q, "page_size", image.MaxPageSize)
+	if errPage != nil || errSize != nil {
+		http.Error(w, "page and page_size must be positive integers", http.StatusBadRequest)
+		return
+	}
+	pageSize = min(pageSize, image.MaxPageSize)
 
-	// Create child span for this handler
-	var span trace.Span
-	if h.tracer != nil {
-		ctx, span = h.tracer.Start(ctx, "listImagesHandler",
-			trace.WithAttributes(
-				attribute.String("handler", "list_images"),
-				attribute.Bool("htmx_request", r.Header.Get("HX-Request") != ""),
-				attribute.Int("tag_filters.count", len(tagFilters)),
-				attribute.Bool("tag_filters.match_all", matchAll),
-			),
-		)
-		defer span.End()
+	ctx, span := h.startSpan(ctx, "listImagesHandler",
+		attribute.String("handler", "list_images"),
+		attribute.Int("tag_filters.count", len(tagFilters)),
+		attribute.Bool("tag_filters.match_all", matchAll),
+		attribute.Int("page", page),
+		attribute.Int("page_size", pageSize),
+	)
+	defer h.endSpan(span)
+
+	if len(tagFilters) > 0 {
+		h.setSpanAttributes(span, attribute.StringSlice("tag_filters.tags", tagFilters))
 	}
 
-	if len(tagFilters) > 0 && span != nil {
-		span.SetAttributes(attribute.StringSlice("tag_filters.tags", tagFilters))
-	}
-
-	images, err := h.getStorageImages(ctx, tagFilters, matchAll)
+	listing, err := h.getStorageImages(ctx, &image.ListImagesRequest{
+		Page:     page,
+		PageSize: pageSize,
+		Tags:     tagFilters,
+		MatchAll: matchAll,
+	})
 	if err != nil {
-		if span != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to get images")
-		}
-		if h.logger != nil {
-			h.logger.Error(ctx).Err(err).Msg("Failed to list images")
-		}
+		h.handleError(ctx, span, err, "Failed to list images", "failed to get images", "")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	h.setSpanAttributes(span, attribute.Int("images.count", len(listing.Images)))
 	if span != nil {
-		span.SetAttributes(attribute.Int("images.count", len(images)))
 		span.AddEvent("images_retrieved", trace.WithAttributes(
-			attribute.Int("count", len(images)),
+			attribute.Int("count", len(listing.Images)),
 		))
 	}
 
-	// Check if this is an HTMX request for HTML or regular JSON request
-	if r.Header.Get("HX-Request") != "" {
-		// Check if this is from our JavaScript filtering UI (has filtered parameter)
-		if r.URL.Query().Get("filtered") == queryParamTrue {
-			// Return JSON with separate HTML chunks for filters and gallery
-			h.renderFilteredJSONResponse(w, images, tagFilters, matchAll)
-		} else {
-			// Initial page load - return plain HTML
-			h.renderHTMLResponse(w, images, tagFilters, matchAll)
-		}
-	} else {
-		h.renderJSONResponse(w, images, tagFilters, matchAll)
-	}
-
-	if span != nil {
-		span.SetStatus(codes.Ok, "")
-	}
+	listing.ActiveFilters = tagFilters
+	listing.MatchAll = matchAll
+	h.renderJSONResponse(w, listing)
+	h.setSpanStatus(span, codes.Ok, "")
 }
 
-// getStorageImages fetches images from database with metadata
-func (h *Handler) getStorageImages(ctx context.Context, tagFilters []string, matchAll bool) ([]ImageResponse, error) {
+func positiveQueryInt(q url.Values, key string, fallback int) (int, error) {
+	raw := q.Get(key)
+	if raw == "" {
+		return fallback, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return n, nil
+}
+
+// ImageListResponse is the body of GET /api/images.
+type ImageListResponse struct {
+	Images        []ImageResponse   `json:"images"`
+	TotalCount    int               `json:"total_count"`
+	Page          int               `json:"page"`
+	PageSize      int               `json:"page_size"`
+	TotalPages    int               `json:"total_pages"`
+	TagColors     map[string]string `json:"tag_colors,omitempty"`
+	ActiveFilters []string          `json:"active_filters,omitempty"`
+	MatchAll      bool              `json:"match_all"`
+}
+
+// getStorageImages fetches one page of images from the database with metadata
+func (h *Handler) getStorageImages(ctx context.Context, req *image.ListImagesRequest) (*ImageListResponse, error) {
 	ctx, span := h.startSpan(ctx, "getStorageImages",
-		attribute.Int("tag_filters.count", len(tagFilters)),
-		attribute.Bool("tag_filters.match_all", matchAll),
+		attribute.Int("tag_filters.count", len(req.Tags)),
+		attribute.Bool("tag_filters.match_all", req.MatchAll),
 	)
 	defer h.endSpan(span)
 
 	// Try ImageService first (preferred path with full metadata)
 	if h.imageService != nil {
-		return h.getImagesFromService(ctx, span, tagFilters, matchAll)
+		return h.getImagesFromService(ctx, span, req)
 	}
 
 	// Fallback to storage-only approach
-	return h.getImagesFromStorage(ctx, span)
+	images, err := h.getImagesFromStorage(ctx, span)
+	if err != nil {
+		return nil, err
+	}
+	return &ImageListResponse{Images: images, TotalCount: len(images), Page: 1, PageSize: len(images), TotalPages: 1}, nil
 }
 
 // getImagesFromService fetches images using the ImageService
-func (h *Handler) getImagesFromService(ctx context.Context, span trace.Span, tagFilters []string, matchAll bool) ([]ImageResponse, error) {
-	listReq := &image.ListImagesRequest{
-		Page:     1,
-		PageSize: 100,
-		Tags:     tagFilters,
-		MatchAll: matchAll,
-	}
-
-	listResp, err := h.imageService.ListImages(ctx, listReq)
+func (h *Handler) getImagesFromService(ctx context.Context, span trace.Span, req *image.ListImagesRequest) (*ImageListResponse, error) {
+	listResp, err := h.imageService.ListImages(ctx, req)
 	if err != nil {
 		h.setSpanStatus(span, codes.Error, "failed to list images from service")
 		if span != nil {
@@ -140,11 +145,26 @@ func (h *Handler) getImagesFromService(ctx context.Context, span trace.Span, tag
 
 	h.setSpanAttributes(span, attribute.Int("images.count", len(listResp.Images)))
 
-	// Convert domain images to response format
 	images := h.convertDomainImagesToResponse(listResp.Images)
+	tagColors := map[string]string{}
+	for _, tag := range req.Tags {
+		tagColors[tag] = settings.GetTagColor(tag)
+	}
+	for i := range images {
+		for _, tag := range images[i].Tags {
+			tagColors[tag] = settings.GetTagColor(tag)
+		}
+	}
 
 	h.setSpanStatus(span, codes.Ok, "")
-	return images, nil
+	return &ImageListResponse{
+		Images:     images,
+		TotalCount: listResp.TotalCount,
+		Page:       listResp.Page,
+		PageSize:   listResp.PageSize,
+		TotalPages: listResp.TotalPages,
+		TagColors:  tagColors,
+	}, nil
 }
 
 // convertDomainImagesToResponse converts domain images to API response format
@@ -162,17 +182,19 @@ func (h *Handler) convertDomainImagesToResponse(domainImages []image.Image) []Im
 		}
 
 		images = append(images, ImageResponse{
-			ID:           fmt.Sprintf("%d", img.ID),
-			Name:         img.OriginalFilename,
-			URL:          viewURL,
-			ThumbnailURL: fmt.Sprintf("/api/images/%d/thumbnail", img.ID),
-			Status:       img.Status,
-			Size:         img.FileSize,
-			UploadTime:   img.UploadedAt.Format("2006-01-02 15:04:05"),
-			ContentType:  img.ContentType,
-			Width:        img.Width,
-			Height:       img.Height,
-			Tags:         tagNames,
+			ID:              fmt.Sprintf("%d", img.ID),
+			Name:            img.OriginalFilename,
+			URL:             viewURL,
+			ThumbnailURL:    fmt.Sprintf("/api/images/%d/thumbnail", img.ID),
+			Status:          img.Status,
+			ProcessingError: img.ProcessingError,
+			Size:            img.FileSize,
+			UploadTime:      img.UploadedAt.Format("2006-01-02 15:04:05"),
+			UploadedAt:      img.UploadedAt,
+			ContentType:     img.ContentType,
+			Width:           img.Width,
+			Height:          img.Height,
+			Tags:            tagNames,
 		})
 	}
 	return images
@@ -221,6 +243,7 @@ func (h *Handler) filterImageObjects(objects []implementations.ObjectInfo) []Ima
 				URL:        viewURL,
 				Size:       obj.Size,
 				UploadTime: obj.LastModified.Format("2006-01-02 15:04:05"),
+				UploadedAt: obj.LastModified,
 			})
 		}
 	}
@@ -228,227 +251,10 @@ func (h *Handler) filterImageObjects(objects []implementations.ObjectInfo) []Ima
 
 }
 
-// renderFilteredJSONResponse returns JSON with separate HTML chunks for filters and gallery
-func (h *Handler) renderFilteredJSONResponse(w http.ResponseWriter, images []ImageResponse, tagFilters []string, matchAll bool) {
-	w.Header().Set("Content-Type", "application/json")
-
-	response := map[string]interface{}{
-		jsonKeyTotalCount: len(images),
-		jsonKeyImages:     images,
-	}
-
-	// Generate filter panel HTML if filters are active
-	if len(tagFilters) > 0 {
-		response["filter_html"] = h.renderActiveFilters(tagFilters, matchAll, len(images))
-	}
-
-	// Generate gallery HTML
-	response["gallery_html"] = h.renderGalleryHTML(images, tagFilters)
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-	}
-}
-
-// renderGalleryHTML generates the HTML for image cards
-func (h *Handler) renderGalleryHTML(images []ImageResponse, tagFilters []string) string {
-	if len(images) == 0 {
-		emptyMsg := `<div class="col-span-full text-center text-gray-500 py-8">`
-		if len(tagFilters) > 0 {
-			emptyMsg += `No images found with the selected tags. <button onclick="clearFilters()" class="text-blue-500 hover:underline ml-2">Clear filters</button>`
-		} else {
-			emptyMsg += `No images found`
-		}
-		emptyMsg += `</div>`
-		return emptyMsg
-	}
-
-	var html strings.Builder
-	for i := range images {
-		html.WriteString(h.renderImageCard(images[i]))
-	}
-	return html.String()
-}
-
-// renderImageCard generates HTML for a single image card
-func (h *Handler) renderImageCard(img ImageResponse) string {
-	metadataBadges := h.buildDimensionsBadge(img) + h.buildContentTypeBadge(img)
-	tagsBadges := h.buildTagsBadges(img)
-
-	return fmt.Sprintf(`
-		<div class="image-card bg-white rounded-lg shadow-md overflow-hidden relative">
-			<div class="absolute top-2 right-2 z-10">
-				<button onclick="toggleImageMenu('%s')" class="bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-1 shadow-md">
-					<svg class="w-5 h-5 text-gray-700" fill="currentColor" viewBox="0 0 20 20">
-						<path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path>
-					</svg>
-				</button>
-				<div id="menu-%s" class="hidden absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg z-20">
-					<button onclick="deleteImage('%s', '%s')" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md">
-						Delete
-					</button>
-				</div>
-			</div>
-			<img src="%s" alt="%s" loading="lazy" class="gallery-image cursor-pointer"
-				 onclick="openModal('%s', '%s', %d)">
-			<div class="p-3">
-				<h3 class="font-medium text-gray-900 truncate mb-2">%s</h3>
-				<div class="mb-2">
-					%s
-				</div>
-				<p class="text-sm text-gray-500 mb-1">%s</p>
-				<p class="text-xs text-gray-400">%s</p>
-				%s
-			</div>
-		</div>`,
-		img.ID, img.ID, img.ID, img.Name,
-		img.ThumbnailURL, img.Name, img.URL, img.Name, img.Size,
-		img.Name,
-		metadataBadges,
-		formatFileSize(img.Size),
-		img.UploadTime,
-		tagsBadges)
-}
-
-// buildDimensionsBadge creates dimensions badge HTML if width and height are present
-func (h *Handler) buildDimensionsBadge(img ImageResponse) string {
-	if img.Width != nil && img.Height != nil {
-		return fmt.Sprintf(`<span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mr-1">%d×%d</span>`, *img.Width, *img.Height)
-	}
-	return ""
-}
-
-// buildContentTypeBadge creates content type badge HTML
-func (h *Handler) buildContentTypeBadge(img ImageResponse) string {
-	if img.ContentType == "" {
-		return ""
-	}
-
-	formatLabel := h.getFormatLabel(img.ContentType)
-	return fmt.Sprintf(`<span class="inline-block bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded mr-1">%s</span>`, formatLabel)
-}
-
-// getFormatLabel returns human-readable format label for content type
-func (h *Handler) getFormatLabel(contentType string) string {
-	switch contentType {
-	case contentTypeJPEG, contentTypeJPEGAlt:
-		return "JPEG"
-	case contentTypePNG:
-		return "PNG"
-	case contentTypeGIF:
-		return "GIF"
-	case contentTypeWebP:
-		return "WebP"
-	default:
-		return "Image"
-	}
-}
-
-// buildTagsBadges creates clickable tag badges HTML
-func (h *Handler) buildTagsBadges(img ImageResponse) string {
-	if len(img.Tags) == 0 {
-		return ""
-	}
-
-	var badges strings.Builder
-	for _, tag := range img.Tags {
-		colorClass := settings.GetLightTagColorClass(tag)
-		fmt.Fprintf(&badges, `<button onclick="filterByTag('%s')" class="inline-block %s text-xs px-2 py-1 rounded mr-1 mb-1 cursor-pointer hover:opacity-80 transition-opacity">%s</button>`,
-			tag, colorClass, tag)
-	}
-
-	return fmt.Sprintf(`<div class="mt-2">%s</div>`, badges.String())
-}
-
-// renderHTMLResponse renders images as HTML for HTMX requests (initial page load)
-func (h *Handler) renderHTMLResponse(w http.ResponseWriter, images []ImageResponse, tagFilters []string, matchAll bool) {
-	w.Header().Set("Content-Type", "text/html")
-
-	if len(images) == 0 {
-		emptyMsg := `<div class="col-span-full text-center text-gray-500 py-8">No images found</div>`
-		if _, err := w.Write([]byte(emptyMsg)); err != nil {
-			http.Error(w, "Failed to write response", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	for i := range images {
-		html := h.renderImageCard(images[i])
-		if _, err := w.Write([]byte(html)); err != nil {
-			http.Error(w, "Failed to write response", http.StatusInternalServerError)
-			return
-		}
-	}
-}
-
-// renderActiveFilters generates HTML for the active filters panel
-func (h *Handler) renderActiveFilters(tagFilters []string, matchAll bool, resultCount int) string {
-	var filterChips string
-	for _, tag := range tagFilters {
-		colorClass := settings.GetTagColorClass(tag)
-		filterChips += fmt.Sprintf(`
-			<span class="inline-flex items-center gap-1 %s px-3 py-1 rounded-full text-sm">
-				%s
-				<button onclick="removeTagFilter('%s')" class="hover:bg-white hover:bg-opacity-20 rounded-full p-0.5">
-					<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-						<path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-					</svg>
-				</button>
-			</span>
-		`, colorClass, tag, url.QueryEscape(tag))
-	}
-
-	matchLogic := "ANY"
-	if matchAll {
-		matchLogic = "ALL"
-	}
-
-	return fmt.Sprintf(`
-		<div id="active-filters" class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-			<div class="flex items-center justify-between flex-wrap gap-3">
-				<div class="flex items-center gap-3 flex-wrap">
-					<span class="text-sm font-medium text-gray-700">Filters:</span>
-					%s
-					<button onclick="clearFilters()" class="text-sm text-blue-600 hover:text-blue-800 hover:underline">
-						Clear all
-					</button>
-				</div>
-				<div class="flex items-center gap-3">
-					<div class="text-sm text-gray-600">
-						Showing <span class="font-semibold">%d</span> images with <span class="font-semibold">%s</span> tags
-					</div>
-					<div class="flex items-center gap-2 bg-white rounded-lg px-3 py-1.5 border border-gray-300">
-						<span class="text-xs text-gray-600">Match:</span>
-						<button onclick="toggleMatchMode()" class="text-xs font-medium px-2 py-0.5 rounded %s">
-							%s
-						</button>
-					</div>
-				</div>
-			</div>
-		</div>
-	`, filterChips, resultCount, matchLogic,
-		func() string {
-			if matchAll {
-				return "bg-blue-100 text-blue-800"
-			}
-			return "bg-gray-100 text-gray-700"
-		}(), matchLogic)
-}
-
 // renderJSONResponse renders images as JSON for API requests
-func (h *Handler) renderJSONResponse(w http.ResponseWriter, images []ImageResponse, tagFilters []string, matchAll bool) {
+func (h *Handler) renderJSONResponse(w http.ResponseWriter, listing *ImageListResponse) {
 	w.Header().Set("Content-Type", "application/json")
-	response := map[string]any{
-		jsonKeyImages:     images,
-		jsonKeyTotalCount: len(images),
-	}
-
-	if len(tagFilters) > 0 {
-		response["active_filters"] = tagFilters
-		response["match_all"] = matchAll
-	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.NewEncoder(w).Encode(listing); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
@@ -506,17 +312,19 @@ func (h *Handler) handleError(ctx context.Context, span trace.Span, err error, l
 }
 
 type ImageResponse struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name,omitempty"`
-	URL          string   `json:"url"`
-	ThumbnailURL string   `json:"thumbnail_url"`
-	Status       string   `json:"status"`
-	Size         int64    `json:"size"`
-	UploadTime   string   `json:"upload_time"`
-	ContentType  string   `json:"content_type,omitempty"`
-	Width        *int     `json:"width,omitempty"`
-	Height       *int     `json:"height,omitempty"`
-	Tags         []string `json:"tags,omitempty"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name,omitempty"`
+	URL             string    `json:"url"`
+	ThumbnailURL    string    `json:"thumbnail_url"`
+	Status          string    `json:"status"`
+	ProcessingError *string   `json:"processing_error,omitempty"`
+	Size            int64     `json:"size"`
+	UploadTime      string    `json:"upload_time"`
+	UploadedAt      time.Time `json:"uploaded_at"`
+	ContentType     string    `json:"content_type,omitempty"`
+	Width           *int      `json:"width,omitempty"`
+	Height          *int      `json:"height,omitempty"`
+	Tags            []string  `json:"tags,omitempty"`
 }
 
 func isImageContentType(contentType string) bool {
@@ -555,23 +363,6 @@ func extractOriginalFilename(metadata map[string]string, objectKey string) strin
 	}
 	// Fallback to the object key (filename) if no metadata
 	return filepath.Base(objectKey)
-}
-
-func formatFileSize(bytes int64) string {
-	if bytes == 0 {
-		return "0 Bytes"
-	}
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	units := []string{"KB", "MB", "GB", "TB"}
-	return fmt.Sprintf("%.1f %s", float64(bytes)/float64(div), units[exp])
 }
 
 // testDatabaseHandler is a test endpoint to validate observability:
