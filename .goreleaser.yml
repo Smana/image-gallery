@@ -39,8 +39,11 @@ archives:
       - CHANGELOG*
       - docs/**/*
 
+# goarch picks the binary copied into the image and defaults to amd64, whatever --platform says.
 dockers:
   - id: image-gallery-amd64
+    goos: linux
+    goarch: amd64
     image_templates:
       - "ghcr.io/smana/image-gallery:{{ .Version }}-amd64"
       - "ghcr.io/smana/image-gallery:latest-amd64"
@@ -58,6 +61,8 @@ dockers:
       - --label=org.opencontainers.image.licenses=MIT
 
   - id: image-gallery-arm64
+    goos: linux
+    goarch: arm64
     image_templates:
       - "ghcr.io/smana/image-gallery:{{ .Version }}-arm64"
       - "ghcr.io/smana/image-gallery:latest-arm64"
