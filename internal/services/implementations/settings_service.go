@@ -255,7 +255,9 @@ func (s *SettingsServiceImpl) ResetSettings(ctx context.Context, userID *string)
 	span.AddEvent("creating_default_settings")
 	// Create new settings with default values
 	defaults := settings.DefaultSettings()
-	defaults.UserID = userID
+	if userID != nil {
+		defaults.UserID = userID
+	}
 
 	span.AddEvent("upserting_to_database")
 	// Upsert (replace existing with defaults)
