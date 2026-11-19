@@ -52,6 +52,7 @@ This is a clean architecture Go application with strict separation of concerns:
   - `storage/`: object storage service — S3 (MinIO/AWS) or GCS, selected by `STORAGE_PROVIDER`
   - `server/`: HTTP server configuration
 - **Web** (`internal/web/`): HTTP handlers and routing
+  - `ui/static/`: the browser front end (HTML, CSS, vanilla JS), embedded in the binary and served at `/gallery` and `/static/` under a strict CSP. It renders from the JSON API only; never build HTML from user data on the server.
 
 ### Key Design Patterns
 - **Dependency Injection**: All services are wired through a container in `internal/services/container.go`
@@ -313,7 +314,7 @@ For local testing without VictoriaMetrics/VictoriaTraces, you can:
 3. Use Prometheus for metrics scraping
 
 ### API Endpoints
-- `GET /api/images` - List images with pagination
+- `GET /api/images` - List images (`page`, `page_size` ≤ 100, `tags` repeated, `match_all`); always JSON
 - `POST /api/images` - Upload new image
 - `GET /api/images/:id/view` - View image (proxy endpoint)
 - `DELETE /api/images/:id` - Delete image

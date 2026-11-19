@@ -724,11 +724,9 @@ func Load() (Config, error) {
 
 ### Planned Improvements
 
-1. **HTMX Integration**: Server-side rendered UI with HTMX
-2. **Event Sourcing**: Domain events for audit trail
-3. **CQRS**: Command Query Responsibility Segregation
-4. **Microservices**: Potential split into focused services
-5. **Observability**: Metrics, tracing, and monitoring
+1. **Event Sourcing**: Domain events for audit trail
+2. **CQRS**: Command Query Responsibility Segregation
+3. **Microservices**: Potential split into focused services
 
 ### Scalability Considerations
 

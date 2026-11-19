@@ -6,7 +6,7 @@ A Go image gallery application for demo purposes.
 
 ```mermaid
 graph TB
-    Web[Web UI<br/>HTMX] --> API[Go API Server<br/>Chi Router]
+    Web[Web UI<br/>embedded, vanilla JS] --> API[Go API Server<br/>Chi Router]
     API --> Cache[Valkey<br/>Cache + job queue]
     API --> DB[(PostgreSQL<br/>Database)]
     API --> Storage[Object Storage<br/>S3 or GCS]

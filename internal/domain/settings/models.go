@@ -2,6 +2,8 @@ package settings
 
 import (
 	"fmt"
+	"net/url"
+	"slices"
 	"time"
 )
 
@@ -52,6 +54,11 @@ const (
 	FontFamilyMontserrat FontFamily = "Montserrat"
 )
 
+var fontFamilies = []FontFamily{
+	FontFamilySystemUI, FontFamilyArial, FontFamilyRoboto,
+	FontFamilyOpenSans, FontFamilyLato, FontFamilyMontserrat,
+}
+
 // GetSettingsRequest represents a request to get user settings
 type GetSettingsRequest struct {
 	UserID *string `json:"user_id,omitempty"`
@@ -87,6 +94,17 @@ func (r *UpdateSettingsRequest) Validate() error {
 		if *r.BackgroundOpacity < 0.0 || *r.BackgroundOpacity > 1.0 {
 			return fmt.Errorf("invalid background opacity: %f (must be between 0.0 and 1.0)", *r.BackgroundOpacity)
 		}
+	}
+
+	if r.BackgroundImageURL != nil && *r.BackgroundImageURL != "" {
+		u, err := url.Parse(*r.BackgroundImageURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("invalid background image URL: %q (must be an http or https URL)", *r.BackgroundImageURL)
+		}
+	}
+
+	if r.FontFamily != nil && !slices.Contains(fontFamilies, FontFamily(*r.FontFamily)) {
+		return fmt.Errorf("invalid font family: %q", *r.FontFamily)
 	}
 
 	if r.TextTheme != nil {

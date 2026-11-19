@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Image Gallery</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+
+  <header class="bar">
+    <div class="bar-row">
+      <h1 class="wordmark"><a href="/gallery">Image Gallery</a></h1>
+      <p class="count" id="count" aria-live="polite"></p>
+      <div class="bar-actions">
+        <button class="faults-badge" id="faultsBadge" type="button" hidden>Faults on</button>
+        <button class="btn btn-quiet" id="openSettings" type="button" aria-haspopup="dialog">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+          <span>Settings</span>
+        </button>
+        <button class="btn btn-primary" id="openUpload" type="button" aria-haspopup="dialog" aria-keyshortcuts="u">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+          <span>Upload</span>
+        </button>
+      </div>
+    </div>
+    <nav class="filters" id="filters" aria-label="Filter by tag" hidden>
+      <div class="tag-rail" id="tagRail"></div>
+      <div class="filter-tools">
+        <div class="segmented" id="matchMode" role="group" aria-label="Match" hidden>
+          <button type="button" data-match="any" aria-pressed="true">Any tag</button>
+          <button type="button" data-match="all" aria-pressed="false">All tags</button>
+        </div>
+        <button class="link-btn" id="clearFilters" type="button" hidden>Clear filters</button>
+      </div>
+    </nav>
+  </header>
+
+  <main class="table" id="table">
+    <ol class="slides" id="slides" aria-label="Images"></ol>
+    <section class="empty" id="empty" hidden>
+      <h2 id="emptyTitle"></h2>
+      <p id="emptyBody"></p>
+      <button class="btn btn-primary" id="emptyAction" type="button"></button>
+    </section>
+    <div class="load-state" id="loadState" aria-live="polite"></div>
+    <div id="sentinel" aria-hidden="true"></div>
+  </main>
+
+  <div class="drop-overlay" id="dropOverlay" hidden>
+    <p>Drop to upload</p>
+  </div>
+
+  <dialog class="panel" id="uploadDialog" aria-labelledby="uploadTitle">
+    <form method="dialog" class="panel-inner" id="uploadForm">
+      <header class="panel-head">
+        <h2 id="uploadTitle">Upload images</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
+        <strong>Choose images</strong>
+        <span>or drop them here. JPEG, PNG, GIF or WebP, up to 10 MB each.</span>
+      </label>
+      <ul class="queue" id="queue" aria-label="Files to upload"></ul>
+      <fieldset class="field">
+        <legend>Tags</legend>
+        <div class="tag-picker" id="tagPicker"></div>
+        <input class="input" id="customTags" type="text" placeholder="Add your own, separated by commas" autocomplete="off">
+      </fieldset>
+      <footer class="panel-foot">
+        <p class="hint" id="uploadSummary"></p>
+        <button class="btn btn-quiet" type="button" data-close>Cancel</button>
+        <button class="btn btn-primary" type="submit" id="uploadSubmit" disabled>Upload</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="viewer" id="viewer" aria-labelledby="viewerName">
+    <div class="viewer-stage">
+      <button class="viewer-nav" id="viewerPrev" type="button" aria-label="Previous image" aria-keyshortcuts="ArrowLeft">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <figure class="viewer-figure">
+        <img id="viewerImg" alt="">
+      </figure>
+      <button class="viewer-nav" id="viewerNext" type="button" aria-label="Next image" aria-keyshortcuts="ArrowRight">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+    <aside class="viewer-info">
+      <header class="viewer-head">
+        <p class="frame-no" id="viewerFrame"></p>
+        <button class="icon-btn" type="button" data-close aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <h2 class="viewer-name" id="viewerName"></h2>
+      <p class="viewer-status" id="viewerStatus" hidden></p>
+      <dl class="facts" id="viewerFacts"></dl>
+      <ul class="slide-tags" id="viewerTags"></ul>
+      <div class="viewer-actions">
+        <a class="btn btn-quiet" id="viewerOriginal" target="_blank" rel="noopener">Open original</a>
+        <button class="btn btn-danger" id="viewerDelete" type="button">Delete</button>
+      </div>
+    </aside>
+  </dialog>
+
+  <dialog class="panel panel-wide" id="settingsDialog" aria-labelledby="settingsTitle">
+    <form method="dialog" class="panel-inner" id="settingsForm">
+      <header class="panel-head">
+        <h2 id="settingsTitle">Settings</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+
+      <section class="settings-group" aria-labelledby="sAppearance">
+        <h3 id="sAppearance">Appearance</h3>
+        <div class="field-row">
+          <fieldset class="field">
+            <legend>Theme</legend>
+            <div class="segmented" role="radiogroup">
+              <label><input type="radio" name="text_theme" value="light"><span>Light</span></label>
+              <label><input type="radio" name="text_theme" value="dark"><span>Dark</span></label>
+            </div>
+          </fieldset>
+          <label class="field">
+            <span class="label">Text typeface</span>
+            <select class="input" name="font_family">
+              <option value="system-ui">System</option>
+              <option value="Arial">Arial</option>
+              <option value="Roboto">Roboto</option>
+              <option value="Open Sans">Open Sans</option>
+              <option value="Lato">Lato</option>
+              <option value="Montserrat">Montserrat</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span class="label">Images per row <output id="colsOut"></output></span>
+          <input type="range" name="grid_columns" min="2" max="6" step="1">
+        </label>
+        <fieldset class="field">
+          <legend>Show on each image</legend>
+          <div class="checks">
+            <label><input type="checkbox" name="show_tags"> Tags</label>
+            <label><input type="checkbox" name="show_dimensions"> Dimensions</label>
+            <label><input type="checkbox" name="show_content_type"> Format</label>
+          </div>
+        </fieldset>
+      </section>
+
+      <section class="settings-group" aria-labelledby="sBackground">
+        <h3 id="sBackground">Background image</h3>
+        <label class="field">
+          <span class="label">Image URL</span>
+          <input class="input" type="url" name="background_image_url" placeholder="https://example.com/photo.jpg" inputmode="url">
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span class="label">Fit</span>
+            <select class="input" name="background_style">
+              <option value="cover">Fill the page</option>
+              <option value="contain">Fit inside</option>
+              <option value="repeat">Tile</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="label">Visibility <output id="opacityOut"></output></span>
+            <input type="range" name="background_opacity" min="0" max="1" step="0.05">
+          </label>
+        </div>
+      </section>
+
+      <footer class="panel-foot">
+        <p class="hint" id="settingsError" role="alert"></p>
+        <button class="btn btn-quiet" type="button" id="resetSettings">Reset to defaults</button>
+        <button class="btn btn-primary" type="submit">Save settings</button>
+      </footer>
+    </form>
+
+    <form class="panel-inner faults" id="faultsForm" hidden>
+      <section class="settings-group" aria-labelledby="sFaults">
+        <h3 id="sFaults">Fault injection</h3>
+        <p class="hint">Applies to every visitor until you turn it off. Use it to rehearse an incident in traces and dashboards.</p>
+        <div class="field-grid">
+          <label class="field"><span class="label">Added latency (ms)</span><input class="input" type="number" name="latency_ms" min="0" max="30000" step="50"></label>
+          <label class="field"><span class="label">Latency probability</span><input class="input" type="number" name="latency_probability" min="0" max="1" step="0.05"></label>
+          <label class="field field-span"><span class="label">Latency routes</span><input class="input" type="text" name="latency_routes" placeholder="All /api routes"><span class="hint">Path prefixes, separated by commas.</span></label>
+          <label class="field"><span class="label">HTTP 5xx probability</span><input class="input" type="number" name="error_probability" min="0" max="1" step="0.05"></label>
+          <label class="field"><span class="label">Slow listing query (ms)</span><input class="input" type="number" name="slow_db_ms" min="0" max="30000" step="50"></label>
+          <label class="field"><span class="label">Worker failure probability</span><input class="input" type="number" name="worker_failure_probability" min="0" max="1" step="0.05"></label>
+          <label class="field"><span class="label">Worker delay (ms)</span><input class="input" type="number" name="worker_delay_ms" min="0" max="10000" step="50"></label>
+        </div>
+      </section>
+      <footer class="panel-foot">
+        <p class="hint" id="faultsStatus" role="status"></p>
+        <button class="btn btn-quiet" type="button" id="faultsOff">Turn all off</button>
+        <button class="btn btn-amber" type="submit">Apply faults</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="panel panel-narrow" id="confirmDialog" aria-labelledby="confirmTitle">
+    <form method="dialog" class="panel-inner">
+      <h2 id="confirmTitle"></h2>
+      <p id="confirmBody"></p>
+      <footer class="panel-foot">
+        <button class="btn btn-quiet" value="cancel">Cancel</button>
+        <button class="btn btn-danger" value="ok" id="confirmOk"></button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" popover="manual"></div>
+
+  <template id="slideTpl">
+    <li class="slide">
+      <span class="frame-no"></span>
+      <button class="slide-window" type="button">
+        <img alt="" loading="lazy" decoding="async">
+        <svg class="spoiled" viewBox="0 0 100 66" preserveAspectRatio="none" aria-hidden="true"><path d="M8 7 L92 60 M90 8 L10 58"/></svg>
+      </button>
+      <div class="slide-label">
+        <p class="slide-name"></p>
+        <p class="slide-meta"></p>
+        <ul class="slide-tags"></ul>
+      </div>
+    </li>
+  </template>
+</body>
+</html>
