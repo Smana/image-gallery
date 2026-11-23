@@ -102,7 +102,7 @@ func TestEndToEndTraceAndInstrumentContract(t *testing.T) {
 	}
 	gauges := redis.NewClient(&redis.Options{Addr: tc.RedisEndpoint})
 	defer func() { _ = gauges.Close() }()
-	gaugeReg, err := queue.RegisterGauges(gauges, otel.Meter("image-gallery/queue"), queue.DefaultStream, queue.DefaultGroup)
+	gaugeReg, err := queue.RegisterGauges(gauges, otel.Meter("image-gallery/queue"), queue.DefaultStream, queue.DefaultGroup, logger)
 	if err != nil {
 		t.Fatal(err)
 	}

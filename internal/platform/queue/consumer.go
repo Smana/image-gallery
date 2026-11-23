@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -52,7 +51,7 @@ func NewConsumer(rdb redis.UniversalClient, opts ...Option) (*Consumer, error) {
 // EnsureGroup creates the stream and the consumer group if missing.
 func (c *Consumer) EnsureGroup(ctx context.Context) error {
 	err := c.rdb.XGroupCreateMkStream(ctx, c.o.stream, c.o.group, "0").Err()
-	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+	if err != nil && !redis.HasErrorPrefix(err, "BUSYGROUP ") {
 		return err
 	}
 	return nil
@@ -92,7 +91,10 @@ func (c *Consumer) Run(ctx context.Context, h Handler) error {
 			if ctx.Err() != nil {
 				break
 			}
-			pause(ctx, time.Second) // Valkey unavailable: readiness reports it; retry the read
+			if redis.HasErrorPrefix(err, "NOGROUP ") {
+				_ = c.EnsureGroup(ctx) //nolint:errcheck // retry after backoff if Valkey is still unavailable
+			}
+			pause(ctx, time.Second)
 			continue
 		}
 		for _, m := range msgs {

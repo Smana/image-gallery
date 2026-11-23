@@ -54,7 +54,7 @@ func RunWorker(ctx context.Context) error {
 
 	gaugeClient := redis.NewClient(&redis.Options{Addr: d.Cfg.Cache.Address, Password: d.Cfg.Cache.Password, DB: d.Cfg.Cache.Database})
 	defer func() { _ = gaugeClient.Close() }() //nolint:errcheck // best-effort close on shutdown
-	gauges, err := queue.RegisterGauges(gaugeClient, otel.Meter("image-gallery/queue"), queue.DefaultStream, queue.DefaultGroup)
+	gauges, err := queue.RegisterGauges(gaugeClient, otel.Meter("image-gallery/queue"), queue.DefaultStream, queue.DefaultGroup, d.Logger)
 	if err != nil {
 		return fmt.Errorf("queue gauges: %w", err)
 	}
