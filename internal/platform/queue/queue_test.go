@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -11,7 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -230,6 +230,35 @@ func TestAutoClaimRecoversAbandonedEntry(t *testing.T) {
 	stop()
 }
 
+func TestConsumerProcessesQueuedJobAfterStreamLoss(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	stream := h.streamName()
+	var handled atomic.Int32
+	stop := runConsumer(t, h, func(_ context.Context, job Job) error {
+		handled.Store(int32(job.ImageID))
+		return nil
+	})
+	defer stop()
+	waitFor(t, "initial consumer group", func() bool {
+		groups, err := h.rdb.XInfoGroups(ctx, stream).Result()
+		return err == nil && len(groups) == 1 && groups[0].Name == "workers"
+	})
+	if _, err := h.rdb.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.Del(ctx, stream)
+		pipe.XAdd(ctx, &redis.XAddArgs{Stream: stream, Values: Job{
+			Type: JobTypeProcessImage, ImageID: 7, ObjectKey: "after-replacement",
+		}.values()})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "job queued before group recovery to be processed and acked", func() bool {
+		pending, err := h.rdb.XPending(ctx, stream, "workers").Result()
+		return err == nil && pending.Count == 0 && handled.Load() == 7
+	})
+}
+
 func TestShutdownFinishesInFlightJob(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
@@ -270,12 +299,17 @@ func TestGaugesAndReady(t *testing.T) {
 	}
 	gaugeReader := sdkmetric.NewManualReader() // a reader registers with ONE provider; the harness's is taken
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(gaugeReader))
-	if _, err := RegisterGauges(h.rdb, mp.Meter("q"), h.streamName(), "workers"); err != nil {
+	if _, err := RegisterGauges(h.rdb, mp.Meter("q"), h.streamName(), "workers", nil); err != nil {
 		t.Fatal(err)
 	}
-	p, _ := NewProducer(h.rdb, h.opts...)
+	// Fixed-age IDs avoid comparing a freshly generated Valkey timestamp to the test host's clock.
+	queuedAt := time.Now().Add(-time.Second).UnixMilli()
 	for i := 0; i < 3; i++ {
-		_, _ = p.Publish(ctx, Job{Type: JobTypeProcessImage, ImageID: i, ObjectKey: "k"})
+		if err := h.rdb.XAdd(ctx, &redis.XAddArgs{
+			Stream: h.streamName(), ID: fmt.Sprintf("%d-%d", queuedAt, i), Values: map[string]any{"job": "queued"},
+		}).Err(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// XReadGroup is synchronous: by the time Result() returns, the entry is
 	// already in the group's PEL, so no extra wait is needed before collecting.
@@ -303,7 +337,6 @@ func TestGaugesAndReady(t *testing.T) {
 	if vals[obs.MetricQueueDepth] != 2 || vals[obs.MetricQueuePending] != 1 || vals[obs.MetricQueueLag] <= 0 {
 		t.Fatalf("gauges = %v, want depth 2, pending 1, lag > 0", vals)
 	}
-	_ = attribute.Key("unused") // keep the import list stable if assertions change
 }
 
 func (h *harness) streamName() string {
