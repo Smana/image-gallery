@@ -5,6 +5,14 @@ This file tracks all notable changes to the Image Gallery project.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3](https://github.com/Smana/image-gallery/compare/v2.1.2...v2.1.3) (2026-11-23)
+
+
+### Bug Fixes
+
+* **queue:** recover workers after Valkey loses the stream group ([802eb3d](https://github.com/Smana/image-gallery/commit/802eb3d8ccc60dc9a890f1575653f7d4806fb0e7))
+* **queue:** recover workers after Valkey loses the stream group ([daa6e5f](https://github.com/Smana/image-gallery/commit/daa6e5ff6b9643d0229e339a7c134c0f2a0f19c4))
+
 ## [2.1.2](https://github.com/Smana/image-gallery/compare/v2.1.1...v2.1.2) (2026-11-19)
 
 
